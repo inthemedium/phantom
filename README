@@ -1,0 +1,21 @@
+To build you will need:
+
+- libxml2
+- libprotobuf-c and protobufc toolchain
+- libssl
+- lpthread
+
+This is all part of a current stable Debian distribution for example
+
+first enter protos subdir and execute ./generate_protos.sh
+second exectute make in src subdir
+
+The scripts subdir contains a small tool to set up a tun device for phantom. The
+source in there is modeled after Jeff Dike's tunctl program and explicitly not part of
+phantom.
+
+See src/test for the leftovers of my test setup network configuration - This
+should give you some pointers on how to set up your own network for testing.
+There is no easy way to do this yet.
+
+        --spjsschl

@@ -1,0 +1,37 @@
+message dummy_setup_package {
+	required bytes seed = 1;
+	required fixed32 size = 2;
+	required fixed32 flags = 3;
+}
+
+message routing_table_entry {
+	required bytes ap_adress = 1;
+	repeated string ip_adresses = 2;
+	repeated fixed32 ports = 3;
+};
+
+message setup_package {
+	required string prev_ip = 1;
+	required string next_ip = 2;
+	required uint32 prev_port = 3;
+	required uint32 next_port = 4;
+	required bytes prev_id = 5;
+	required bytes next_id = 6;
+	required bytes prev_communication_certificate_flat = 7;
+	required bytes next_communication_certificate_flat = 8;
+	required bytes construction_certificate_flat = 9;
+	repeated dummy_setup_package dummies = 10;
+	required uint32 nkeys = 11;
+	required bytes key_seed = 12;
+	required bytes replacement_seed = 13;
+	required bytes key_salt = 14;
+	required uint32 flags = 15;
+	required bytes hash = 16;
+	required bytes external_hash = 17;
+	optional bytes ap_adress = 18;
+	optional routing_table_entry rte = 19;
+}
+
+message setup_array {
+	repeated bytes slots = 1;
+}

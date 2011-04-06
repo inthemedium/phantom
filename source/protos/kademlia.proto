@@ -1,0 +1,37 @@
+message node_info {
+	required bytes id = 1;
+	required uint32 port = 2;
+	required bytes cert = 3;
+	required bytes pbc = 4;
+	required string ip = 5;
+};
+
+message store {
+	required bytes key = 1;
+	required bytes data = 2;
+	required node_info self = 3;
+};
+
+message store_reply {
+	required bool success = 1;
+};
+
+message find_close_nodes {
+	required bytes id = 1;
+	required node_info self = 2;
+};
+
+message find_close_nodes_reply {
+	repeated node_info nodes = 1;
+};
+
+message find_value {
+	required bytes key = 1;
+	required node_info self = 2;
+};
+
+message find_value_reply {
+	required bool success = 1;
+	repeated node_info nodes = 2;
+	optional bytes data = 3;
+};
