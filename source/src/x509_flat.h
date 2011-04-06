@@ -14,7 +14,7 @@
 
 struct X509_flat {
 	uint8_t *data;
-	int len;
+	size_t len;
 };
 
 struct X509_flat *new_X509_flat(void);
@@ -23,7 +23,7 @@ struct X509_flat *deserialize_X509_flat(const uint8_t *serialized);
 void free_X509_flat(struct X509_flat *x);
 struct X509_flat *read_x509_from_file_flat(const char *path);
 X509 *read_x509_from_x509_flat(const struct X509_flat *fx);
-int X509_serialized_size(const struct X509_flat *x);
+size_t X509_serialized_size(const struct X509_flat *x);
 struct X509_flat *flatten_X509(X509 *x);
 int X509_compare(X509 *a, X509 *b);
 int X509_compare_mixed(struct X509_flat *a, X509 *b);

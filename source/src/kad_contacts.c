@@ -1,42 +1,53 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <inttypes.h>
+#include <assert.h>
+
+#include "helper.h"
+#include "kademlia.h"
+#include "x509_flat.h"
 #include "kad_contacts.h"
 
 static int
 write_contact(FILE *f, struct kad_node_info *contact)
 {
-	struct X509_flat *cert, *pbc;
-	int ret;
+	struct X509_flat *cert = NULL, *pbc = NULL;
+	int ret = -1;
 	assert(contact);
 	ret = fwrite(contact->id, SHA_DIGEST_LENGTH, 1, f);
 	if (ret != 1) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
 	cert = flatten_X509(contact->cert);
-	if (cert == NULL) {
-		return -1;
-	}
 	pbc = flatten_X509(contact->pbc);
-	if (pbc == NULL) {
-		free_X509_flat(cert);
-		return -1;
+	if (cert == NULL || pbc == NULL) {
+		ret = -1;
+		goto abort;
 	}
-	ret = fprintf(f, "\n%hi %s %i %i\n", contact->port, contact->ip, cert->len, pbc->len);
+	ret = fprintf(f, "\n%hi %s %lu %lu\n",
+	              contact->port, contact->ip,
+	              (long unsigned) cert->len,
+	              (long unsigned) pbc->len);
 	if (ret < 0) {
-		free_X509_flat(cert);
-		free_X509_flat(pbc);
-		return -1;
+		ret = -1;
+		goto abort;
 	}
 	ret = fwrite(cert->data, cert->len, 1, f);
-	free_X509_flat(cert);
 	if (ret != 1) {
-		free_X509_flat(pbc);
-		return -1;
+		ret = -1;
+		goto abort;
 	}
 	ret = fwrite(pbc->data, pbc->len, 1, f);
-	free_X509_flat(pbc);
 	if (ret != 1) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	return 0;
+	ret = 0;
+abort:
+	free_X509_flat(cert);
+	free_X509_flat(pbc);
+	return ret;
 }
 
 static int
@@ -44,58 +55,86 @@ read_contact(FILE *f, struct kad_node_info *contact)
 {
 	uint8_t id[SHA_DIGEST_LENGTH];
 	struct kad_node_info *new;
-	X509 *x, *xp;
+	X509 *x = NULL, *xp = NULL;
 	short port;
 	char ip[40];
-	struct X509_flat cert, pbc;
-	int ret;
+	struct X509_flat *cert = NULL, *pbc = NULL;
+	int ret = -1;
 	assert(f);
 	assert(contact);
 	ret = fread(id, SHA_DIGEST_LENGTH, 1, f);
 	if (ret != 1) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	ret = fscanf(f, "\n%hi %s %i %i\n", &port, ip, &cert.len, &pbc.len);
+	cert = new_X509_flat();
+	pbc = new_X509_flat();
+	if (cert == NULL || pbc == NULL) {
+		ret = -1;
+		goto abort;
+	}
+	ret = fscanf(f, "\n%hi %s %lu %lu\n",
+	             &port, ip,
+	             (long unsigned *) cert->len,
+	             (long unsigned *) pbc->len);
 	if (ret != 4) {
 		printf("fail1\n");
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	cert.data = malloc(cert.len);
-	if (cert.data == NULL) {
-		return -1;
+	if (cert->len != 0
+	    && cert->len <= SIZE_MAX/sizeof(*(cert->data))) {
+		cert->data = malloc(cert->len*sizeof(*(cert->data)));
 	}
-	ret = fread(cert.data, cert.len, 1, f);
+	if (cert->data == NULL) {
+		ret = -1;
+		goto abort;
+	}
+	ret = fread(cert->data, cert->len, 1, f);
 	if (ret != 1) {
-		free(cert.data);
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	x = read_x509_from_x509_flat(&cert);
-	free(cert.data);
+	x = read_x509_from_x509_flat(cert);
 	if (x == NULL) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	pbc.data = malloc(pbc.len);
-	if (cert.data == NULL) {
-		return -1;
+	if (pbc->len != 0
+	    && pbc->len <= SIZE_MAX/sizeof(*(pbc->data))) {
+		pbc->data = malloc(pbc->len*sizeof(*(pbc->data)));
 	}
-	ret = fread(pbc.data, pbc.len, 1, f);
+	if (pbc->data == NULL) {
+		ret = -1;
+		goto abort;
+	}
+	ret = fread(pbc->data, pbc->len, 1, f);
 	if (ret != 1) {
-		free(pbc.data);
-		return -1;
+		ret = -1;
+		goto abort;
 	}
-	xp = read_x509_from_x509_flat(&pbc);
-	free(pbc.data);
+	xp = read_x509_from_x509_flat(pbc);
 	if (xp == NULL) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
 	new = new_kad_node_info(id, ip, port, x, xp);
-	X509_free(x);
-	X509_free(xp);
 	if (new == NULL) {
-		return -1;
+		ret = -1;
+		goto abort;
 	}
 	LIST_insert(contact, new);
-	return 0;
+	ret = 0;
+abort:
+	free_X509_flat(cert);
+	free_X509_flat(pbc);
+	if (x != NULL) {
+		X509_free(x);
+	}
+	if (xp != NULL) {
+		X509_free(xp);
+	}
+	return ret;
 }
 
 int
