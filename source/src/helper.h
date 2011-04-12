@@ -28,6 +28,7 @@
 #include <sys/socket.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
+#include <stdint.h>
 
 struct ssl_connection {
 	SSL *ssl;
@@ -59,5 +60,9 @@ char *strdup(const char *s);
 uint8_t *read_package(SSL *ssl, uint32_t *outsize);
 int write_package(SSL *ssl, uint8_t *data, uint32_t len);
 /*int get_phantom_v6_addr(struct in6_addr *res);*/
+
+#if !defined(SIZE_MAX)
+#define SIZE_MAX (~((size_t)0))
+#endif
 
 #endif
