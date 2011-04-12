@@ -51,11 +51,8 @@ hexdump(const void *buf, int size)
 X509 *
 read_x509_from_file(const char *path)
 {
-	BIO *in = NULL;
-	X509 *x = NULL;
-	if (path == NULL) {
-		return NULL;
-	}
+	BIO *in;
+	X509 *x;
 	in = BIO_new_file(path, "r");
 	if (in == NULL) {
 		return NULL;
@@ -68,7 +65,6 @@ read_x509_from_file(const char *path)
 void
 serialize_32_t(uint32_t t, uint8_t *buf)
 {
-	assert(buf != NULL);
 	buf[0] = (t >> 24) & 0xff;
 	buf[1] = (t >> 16) & 0xff;
 	buf[2] = (t >> 8) & 0xff;
@@ -78,14 +74,12 @@ serialize_32_t(uint32_t t, uint8_t *buf)
 uint32_t
 deserialize_32_t(const uint8_t *buf)
 {
-	assert(buf != NULL);
-	return (buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3]);
+	return buf[0] << 24 | buf[1] << 16 | buf[2] << 8 | buf[3];
 }
 
 void
 serialize_16_t(uint16_t t, uint8_t *buf)
 {
-	assert(buf != NULL);
 	buf[0] = (uint8_t) (t >> 8);
 	buf[1] = (uint8_t) (t);
 }
@@ -93,8 +87,7 @@ serialize_16_t(uint16_t t, uint8_t *buf)
 uint16_t
 deserialize_16_t(const uint8_t *buf)
 {
-	assert(buf != NULL);
-	return ((((uint16_t) (buf[0])) << 8) + buf[1]);
+	return (((uint16_t) (buf[0])) << 8) + buf[1];
 }
 
 EVP_PKEY *

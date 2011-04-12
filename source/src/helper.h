@@ -60,9 +60,4 @@ uint8_t *read_package(SSL *ssl, uint32_t *outsize);
 int write_package(SSL *ssl, uint8_t *data, uint32_t len);
 /*int get_phantom_v6_addr(struct in6_addr *res);*/
 
-#if !defined(SIZE_MAX)
-#warning "SIZE_MAX not defined"
-#define SIZE_MAX (!((size_t)0))
-#endif
-
 #endif
