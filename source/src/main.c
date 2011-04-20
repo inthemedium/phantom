@@ -1,5 +1,6 @@
 #include <stddef.h>
 #include <stdlib.h>
+#include <ctype.h>
 #include <time.h>
 #include <openssl/ssl.h>
 #include <openssl/rand.h>
@@ -131,11 +132,11 @@ main(int argc, char **argv)
 {
 	int ret, quit, exit_path;
 	struct config config;
+	int c;
 	char confname[HOST_NAME_MAX + 100], buf[100];
 	struct tun_dev *tun;
 	struct app a;
 	char **oldenv;
-	struct utsname u;
 	tun = NULL;
 	(void) argv;
 	(void) argc;
@@ -145,26 +146,51 @@ main(int argc, char **argv)
 		printf("failed to block sigpipe\n");
 		exit(EXIT_FAILURE);
 	}
-	oldenv = sanitize_environment();
-	bzero(&u, sizeof (struct utsname));
-	ret = uname(&u);
-	if (ret != 0) {
-		printf("could not get hostname");
-		exit(EXIT_FAILURE);
+
+	confname[0] = 0;
+	while ((c = getopt (argc, argv, "h:")) != -1) {
+		switch (c) {
+			case 'h':
+				sprintf(confname, "logs/%s.log", optarg); /*XXX snprintf not in posix*/
+				sprintf(confname, "test/%s.conf", optarg); /*XXX snprintf not in posix*/
+				break;
+			case '?':
+				if (optopt == 'h') {
+					fprintf(stderr, "Option -%c requires an argument.\n", optopt);
+				} else if (isprint(optopt)) {
+					fprintf(stderr, "Unknown option `-%c'.\n", optopt);
+				} else {
+					fprintf(stderr, "Unknown option character `\\x%x'.\n", optopt);
+				}
+				return 1;
+			default:
+				abort();
+		}
 	}
-	sprintf(confname, "logs/%s.log", u.nodename); /*XXX snprintf not in posix*/
-	sprintf(confname, "test/%s.conf", u.nodename); /*XXX snprintf not in posix*/
+	if (confname[0] == 0) {
+		struct utsname u;
+		oldenv = sanitize_environment();
+		bzero(&u, sizeof (struct utsname));
+		ret = uname(&u);
+		if (ret != 0) {
+			printf("could not get hostname\n");
+			exit(EXIT_FAILURE);
+		}
+		sprintf(confname, "logs/%s.log", u.nodename); /*XXX snprintf not in posix*/
+		sprintf(confname, "test/%s.conf", u.nodename); /*XXX snprintf not in posix*/
+	}
+	fprintf(stdout, "Loading configuration file %s\n", confname);
 	read_config(confname, &config);
 	init_randgen();
 	init_locks();
 	ret = start_server(&config);
 	if (ret) {
-		printf("Server creation failed");
+		printf("Server creation failed\n");
 		exit(EXIT_FAILURE);
 	}
 	ret = start_kad(&config);
 	if (ret != 0) {
-		printf("failed to start kad");
+		printf("failed to start kad\n");
 		exit(EXIT_FAILURE);
 	}
 	bzero(&a, sizeof (struct app));
