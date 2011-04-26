@@ -9,7 +9,7 @@ for i in $HOSTS;
 		openssl genrsa 1024 > "$i-privkey-$j.pem";
 		yes XX | openssl req -new -x509 -nodes -sha1 -days 365 -key "$i-privkey-$j.pem" > "$i-$j.pem";
 	done
-IP="localhost"
+IP="127.0.0.1"
 let "PORT=PORT+1"
 cat << EOF > $i.conf
 <?xml version="1.0" encoding="iso-8859-1" ?>
