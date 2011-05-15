@@ -1,0 +1,11 @@
+--- phantom.sh.old	2011-05-06 18:11:23.000000000 +0000
++++ phantom.sh	2011-05-06 18:11:36.000000000 +0000
+@@ -1,7 +1,7 @@
+ #!/bin/bash
+ #XXX change this to your needs
+ USER=phantom_user
+-TUNCTL=/path/to/tunnel_binary
++TUNCTL=./tunnel
+ 
+ start() {
+ 	echo start

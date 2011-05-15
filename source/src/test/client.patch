@@ -1,0 +1,23 @@
+diff --git a/default/nfs-common b/default/nfs-common
+index 52f7f91..c0a1735 100644
+--- a/default/nfs-common
++++ b/default/nfs-common
+@@ -13,7 +13,7 @@ NEED_STATD=
+ STATDOPTS=
+ 
+ # Do you want to start the idmapd daemon? It is only needed for NFSv4.
+-NEED_IDMAPD=
++NEED_IDMAPD=yes
+ 
+ # Do you want to start the gssd daemon? It is required for Kerberos mounts.
+-NEED_GSSD=
++NEED_GSSD=no
+diff --git a/fstab b/fstab
+index ee4bafb..562fe7e 100644
+--- a/fstab
++++ b/fstab
+@@ -4,3 +4,4 @@ proc                                            /proc           proc    nodev,no
+ LABEL=uec-rootfs                                       /               ext3    defaults        0       0
+ /dev/sda2	/mnt	auto	defaults,nobootwait,comment=cloudconfig	0	0
+ /dev/sda3	none	swap	sw,comment=cloudconfig	0	0
++172.19.1.66:/   /home/ubuntu/phantom   nfs4    _netdev,auto  0  0
