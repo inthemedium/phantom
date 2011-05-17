@@ -1,14 +1,4 @@
-#!/bin/bash
-
-if [ -n "${1}" ]
-then
-	HOSTS="$1"
-else
-	echo "Enter the hosts for which you wish to generate a config file for sperated by a space:"
-	read HOSTS
-fi
-
-echo $HOSTS
+HOSTS="faui00a faui00b faui00c faui00d faui00e faui00f faui00g faui00h faui00i faui00j faui00k faui03a faui00l faui00m faui00n faui00o faui00p faui00q faui00r faui00s faui00t"
 
 CERTPOSTS="cc pbc rc"
 for i in $HOSTS;
@@ -18,14 +8,7 @@ for i in $HOSTS;
 		openssl genrsa 1024 > "$i-privkey-$j.pem";
 		yes XX | openssl req -new -x509 -nodes -sha1 -days 365 -key "$i-privkey-$j.pem" > "$i-$j.pem";
 	done
-
-	# seccloud specific!
-	if ! host -t A "$i"
-	then
-		IP=`echo "$i" | cut -b 4- | sed -e 's/-/./g'`
-	else
-		IP=`host -t A $i | cut -d ' ' -f 4`
-	fi
+IP=`host -t A $i | cut -d ' ' -f 4`
 cat << EOF > $i.conf
 <?xml version="1.0" encoding="iso-8859-1" ?>
 
