@@ -1,5 +1,16 @@
 #!/usr/bin/env python2.6
 
+# The script can be called as follows:
+# python buildEucaNetwork.py [num_inst]
+# where num_inst is the number of instances to launch, if it is not present the currently running instances will have commands run on them
+
+# In order for this script to work you will need to do the following:
+# 1. install boto and paramiko python modules
+# 2. generate a key named 'phantom' on eucalyptus and place it at '~/.euca/id_phantom'
+# 3. setup euca2ools such that the environment variables 'EC2_URL', 'EC2_ACCESS_KEY', and 'EC2_SECRET_KEY' key are defined
+# 4. change the my_id to your eucalpytus username
+# 5. running it on the secclound!
+
 import pdb
 import os
 import sys
@@ -225,7 +236,7 @@ for thread in cmd_inst_threads:
     thread.join()
     print thread.results
 
-pdb.set_trace()
+# pdb.set_trace()
 
 
 #pdb.set_trace()
