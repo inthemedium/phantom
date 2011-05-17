@@ -8,22 +8,36 @@ import boto
 import boto.ec2
 import paramiko
 from pprint import pprint
-# from threading import Thread
-# import Queue
+from threading import Thread
 
-# class SetupClient(Thread):
-#     def __init__ (self, ssh, command, results):
-#         Thread.__init__(self)
-#         self.ssh = ssh
-#         self.command = command
-#         self.results = results
+class CommandInstance(Thread):
+    def __init__ (self, instance):
+        Thread.__init__(self)
+        self.instance = instance
+        self.ssh = paramiko.SSHClient()
+        ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
+        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.ssh.connect('128.111.48.6', 
+                    ssh_port, 
+                    'ubuntu', 
+                    key_filename=key_filename)
+        self.ftp = self.ssh.open_sftp()
+        self.command = ""
+        self.results = []
 
-#     def run(self):
-#         stdin, stdout, stderr = self.ssh.exec_command(self.command)
-#         #print stdout.readlines()
-#         self.ssh.close()
-#         results.put(stdout.readlines())
+    def set_command(self, command, src_file='', dest_file=''):
+        self.command = command
+        self.src_file = src_file
+        self.dest_file = dest_file
 
+    def run(self):
+        if self.src_file != '':
+            self.ftp.put(self.src_file, self.dest_file)
+        stdin, stdout, stderr = self.ssh.exec_command(self.command)
+        self. results = stdout.readlines()
+        self.ftp.close()
+        self.ssh.close()
+        # print stdout.readlines()
 
 ep_hostname = os.environ['EC2_URL'].split('/')[2].split(':')[0]
 ep_port = int(os.environ['EC2_URL'].split('/')[2].split(':')[1])
@@ -149,21 +163,9 @@ ftp.close()
 ssh.close()
 
 
-ssh_threads = []
-# results = Queue.Queue()
+cmd_inst_threads = []
 for inst in instances:
     if not inst.tags['server']:
-        pdb.set_trace()
-        ssh = paramiko.SSHClient()
-        ssh_port = int('48' + inst.dns_name.split('.')[3].zfill(3))
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect('128.111.48.6', 
-                    ssh_port, 
-                    'ubuntu', 
-                    key_filename=key_filename)
-
-        ftp = ssh.open_sftp()
-        ftp.put('./client.patch', 'client.patch')
         command = """sudo apt-get -y install nfs-common libprotobuf-c0 &&\
         sudo useradd phantom_user &&\
         cd /etc &&\
@@ -174,21 +176,56 @@ for inst in instances:
         cd &&\
         mkdir phantom &&\
         sudo mount -t nfs4 """ + server_inst.private_dns_name + """:/ /home/ubuntu/phantom"""
-        stdin, stdout, stderr = ssh.exec_command(command)
-        print stdout.readlines()
-        ftp.close()
-        ssh.close() 
-#         current = SetupClient(ssh, command, results)
-#         ssh_threads.append(current)
-#         current.start()
+        current = CommandInstance(inst)
+        current.set_command(command, './client.patch', 'client.patch')
+        cmd_inst_threads.append(current)
+        current.start()
 
-# for thread in ssh_threads:
-#     thread.join()
-    
-# foo = "asfasf"
-# while foo != None:
-#     foo = results.get()
-#     print foo
+for thread in cmd_inst_threads:
+    thread.join()
+    print thread.results
+
+cmd_inst_threads = []
+for inst in instances:
+    command = "hostname"
+    current = CommandInstance(inst)
+    current.set_command(command)
+    cmd_inst_threads.append(current)
+    current.start()
+
+hostnames = ""
+for thread in cmd_inst_threads:
+    thread.join()
+    hostnames = thread.results[0].split('\n')[0] + " " + hostnames
+
+cmd_inst_threads = []
+command = """cd phantom/source/src/test &&\
+rm *.pem *.list *.conf *.data &&\
+./gencerts.sh '""" + hostnames + """' &&\
+./genkadnodes-list.sh"""
+current = CommandInstance(server_inst)
+current.set_command(command)
+cmd_inst_threads.append(current)
+current.start()
+
+for thread in cmd_inst_threads:
+    thread.join()
+
+cmd_inst_threads = []
+for inst in instances:
+    command = """echo "screen
+stuff 'cd /home/ubuntu/phantom/source/src/ && sudo ./phantomd && sudo ./phantom\015'" > phantom.screenrc &&\
+    screen -d -m -c phantom.screenrc """
+    current = CommandInstance(inst)
+    current.set_command(command)
+    cmd_inst_threads.append(current)
+    current.start()
+
+for thread in cmd_inst_threads:
+    thread.join()
+    print thread.results
+
+pdb.set_trace()
 
 
 #pdb.set_trace()

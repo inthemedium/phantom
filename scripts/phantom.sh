@@ -1,7 +1,7 @@
 #!/bin/bash
 #XXX change this to your needs
 USER=phantom_user
-TUNCTL=/path/to/tunnel_binary
+TUNCTL=./tunnel
 
 start() {
 	echo start
