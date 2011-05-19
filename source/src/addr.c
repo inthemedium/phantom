@@ -12,7 +12,8 @@ send_msg(struct in6_addr *addr, char prefix)
 		return -1;
 	}
 	name.sun_family = AF_FILE;
-	strcpy(name.sun_path, SOCKNAME);
+	assert(sizeof(name.sun_path) >= strlen(SOCKNAME) + 1);
+	strncpy(name.sun_path, SOCKNAME, sizeof(name.sun_path));
 	size = (offsetof(struct sockaddr_un, sun_path) + strlen(name.sun_path) + 1);
 	ret = connect(s, (struct sockaddr *) &name, size);
 	if (ret < 0) {

@@ -14,37 +14,49 @@ read_cert(char *path)
 static void
 parse_config(xmlDocPtr doc, xmlNodePtr cur, struct config *config)
 {
-	xmlChar *key;
+	xmlChar *key = NULL;
+	size_t keylen = 0;
 	FILE *fh;
 	RSA *x;
 	cur = cur->xmlChildrenNode;
 	while (cur != NULL) {
 		if (!xmlStrcmp(cur->name, (const xmlChar *) "ip")) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-			config->ip = malloc(strlen((char *) key) + 1);
+			keylen = strlen((char *) key);
+			if (keylen < SIZE_MAX) {
+				config->ip = malloc(keylen + 1);
+			}
 			if (config->ip == NULL) {
 				printf("malloc failed\n");
 				exit(EXIT_FAILURE);
 			}
-			strcpy(config->ip, (char *) key);
+			strncpy(config->ip, (char *) key, keylen + 1);
 			xmlFree(key);
 		} else if (!xmlStrcmp(cur->name, (const xmlChar *) "kadnodefile")) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-			config->kad_node_file = malloc(strlen((char *) key) + 1);
+			keylen = strlen((char *) key);
+			if (keylen < SIZE_MAX) {
+				config->kad_node_file = malloc(keylen + 1);
+			}
 			if (config->kad_node_file == NULL) {
 				printf("malloc failed\n");
 				exit(EXIT_FAILURE);
 			}
-			strcpy(config->kad_node_file, (char *) key);
+			strncpy(config->kad_node_file, (char *) key,
+			        keylen + 1);
 			xmlFree(key);
 		} else if (!xmlStrcmp(cur->name, (const xmlChar *) "kaddata")) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);
-			config->kad_data_dir = malloc(strlen((char *) key) + 1);
+			keylen = strlen((char *) key);
+			if (keylen < SIZE_MAX) {
+				config->kad_data_dir = malloc(keylen + 1);
+			}
 			if (config->kad_data_dir == NULL) {
 				printf("malloc failed\n");
 				exit(EXIT_FAILURE);
 			}
-			strcpy(config->kad_data_dir, (char *) key);
+			strncpy(config->kad_data_dir, (char *) key,
+			        keylen + 1);
 			xmlFree(key);
 		} else if (!xmlStrcmp(cur->name, (const xmlChar *) "port")) {
 			key = xmlNodeListGetString(doc, cur->xmlChildrenNode, 1);

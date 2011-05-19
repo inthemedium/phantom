@@ -181,7 +181,8 @@ main(int argc, char **argv)
 		exit(EXIT_FAILURE);
 	}
 	name.sun_family = AF_FILE;
-	strcpy(name.sun_path, SOCKNAME);
+	assert(sizeof(name.sun_path) >= strlen(SOCKNAME) + 1);
+	strncpy(name.sun_path, SOCKNAME, sizeof(name.sun_path));
 	size = (offsetof(struct sockaddr_un, sun_path) + strlen(name.sun_path) + 1);
 	unlink(SOCKNAME);
 	if (bind (fd, (struct sockaddr *) &name, size) < 0) {

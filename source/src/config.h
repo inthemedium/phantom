@@ -9,6 +9,7 @@
 #include "string.h"
 #include "x509_flat.h"
 #include "assert.h"
+#include "helper.h"
 
 /* all for aes_256_aes_cbc */
 #define SYMMETRIC_CIPHER_KEY_LEN 64
