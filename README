@@ -1,3 +1,5 @@
+Project website: http://code.google.com/p/phantom
+
 To build you will need:
 
 - libxml2
@@ -7,15 +9,25 @@ To build you will need:
 
 This is all part of a current stable Debian distribution for example
 
-first enter protos subdir and execute ./generate_protos.sh
-second exectute make in src subdir
+First enter protos subdir and execute ./generate_protos.sh second execute make
+in src subdir.
 
 The scripts subdir contains a small tool to set up a tun device for phantom. The
-source in there is modeled after Jeff Dike's tunctl program and explicitly not part of
-phantom.
+source in there is modeled after Jeff Dike's tunctl program and explicitly not
+part of phantom.
 
 See src/test for the leftovers of my test setup network configuration - This
 should give you some pointers on how to set up your own network for testing.
 There is no easy way to do this yet.
 
-        --spjsschl
+For general information about Phantom and its implementation you can find some
+resources in the docs subdirectory and some further information is provided by
+the links below:
+- DEFCON presentation video (speaker + slides):
+  https://media.defcon.org/dc-16/video/Defcon16-Magnus_Brading-The_Phantom_Protocol.m4v
+- DEFCON presentation video (slides only):
+  https://media.defcon.org/dc-16/video/Defcon16-Magnus_Brading-The_Phantom_Protocol-Slides_Only.m4v
+- DEFCON presentation (audio only):
+  https://media.defcon.org/dc-16/audio/Defcon16-Magnus_Brading-The_Phantom_Protocol.m4b
+
+	--spjsschl
