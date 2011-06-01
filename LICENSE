@@ -1,6 +1,6 @@
-This Phantom Protocol implementation is Copyright (c) 2010
-Johannes Schlumberger (spjsschl [at] informatik.uni-erlangen.de) and
-Magnus Bråding (magnus [dot] brading [at] fortego [dot] se).
+This Phantom Protocol implementation is Copyright (c) 2010 Johannes Schlumberger
+(asso [at] 0xbadc0ffee.de) and Magnus Bråding (magnus [dot] brading [at] fortego
+[dot] se).
 
 The Phantom Protocol specification was created by Magnus Bråding, and the
 original implementation of the Phantom Protocol was created by Johannes
