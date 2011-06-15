@@ -155,11 +155,11 @@ def main():
     git svn clone -s http://phantom.googlecode.com/svn phantom &&\
     cd phantom &&\
     patch -p1 < phantom.patch &&\
-    cd source/protos &&\
+    cd protos &&\
     ./generate_protos.sh &&\
     cd ../src &&\
     make &&\
-    cd ~/phantom/source/scripts &&\
+    cd ~/phantom/scripts &&\
     make &&\
     sudo useradd phantom_user &&\
     sudo bash ./phantom.sh start &&\
@@ -191,7 +191,7 @@ def main():
     for inst in results:
         hostnames = inst.results[0].split('\n')[0] + " " + hostnames
 
-    command = """cd phantom/source/src/test &&\
+    command = """cd phantom/src/test &&\
     rm *.pem *.list *.conf *.data &&\
     ./gencerts.sh '""" + hostnames + """' &&\
     ./genkadnodes-list.sh"""

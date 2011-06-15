@@ -1,7 +1,7 @@
 diff --git a/source/scripts/phantom.sh b/source/scripts/phantom.sh
 index f027a81..d77823a 100644
---- a/source/scripts/phantom.sh
-+++ b/source/scripts/phantom.sh
+--- a/scripts/phantom.sh
++++ b/scripts/phantom.sh
 @@ -1,7 +1,7 @@
  #!/bin/bash
  #XXX change this to your needs
@@ -13,8 +13,8 @@ index f027a81..d77823a 100644
  	echo start
 diff --git a/source/src/test/gencerts.sh b/source/src/test/gencerts.sh
 index e00e8ec..7ebecdb 100755
---- a/source/src/test/gencerts.sh
-+++ b/source/src/test/gencerts.sh
+--- a/src/test/gencerts.sh
++++ b/src/test/gencerts.sh
 @@ -1,4 +1,14 @@
 -HOSTS="faui00a faui00b faui00c faui00d faui00e faui00f faui00g faui00h faui00i faui00j faui00k faui03a faui00l faui00m faui00n faui00o faui00p faui00q faui00r faui00s faui00t"
 +#!/bin/bash
