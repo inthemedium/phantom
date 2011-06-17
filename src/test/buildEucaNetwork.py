@@ -28,6 +28,9 @@ img_username = "ubuntu"
 key_name = "phantom"
 key_filename = os.path.expanduser('~/.euca/id_' + key_name)
 
+ec2_inside_url = "http://192.168.48.91:8773/services/Eucalyptus"
+inside_access = None
+
 # hard-coded for now
 my_id = "inthemedium"
 
@@ -36,13 +39,12 @@ class CommandInstance(Thread):
         Thread.__init__(self)
         self.instance = instance
         self.ssh = paramiko.SSHClient()
-        ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
+        self.hostname = instance.dns_name
+        self.ssh_port = 22
+        if not inside_access:
+            self.hostname = "128.111.48.6"
+            self.ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
         self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        self.ssh.connect('128.111.48.6', 
-                    ssh_port, 
-                    img_username, 
-                    key_filename=key_filename)
-        self.ftp = self.ssh.open_sftp()
         self.command = ""
         self.results = []
 
@@ -51,15 +53,21 @@ class CommandInstance(Thread):
         self.file_tuples = file_tuples
 
     def run(self):
+        self.ssh.connect(self.hostname, 
+                         self.ssh_port, 
+                         img_username, 
+                         key_filename=key_filename)
+        ftp = self.ssh.open_sftp()
         for src, dest in self.file_tuples:
-            self.ftp.put(src, dest)
+            ftp.put(src, dest)
         stdin, stdout, stderr = self.ssh.exec_command(self.command)
-        self. results = stdout.readlines()
-        self.ftp.close()
+        self.results = stdout.readlines()
+        ftp.close()
         self.ssh.close()
         # print stdout.readlines()
 
-def run_command_on_instances(command, instances, file_tuples=()):
+def run_command_on_instances(command, instances, file_tuples=[]):
+    print file_tuples
     cmd_inst_threads = []
     for inst in instances:
         current = CommandInstance(inst)
@@ -80,6 +88,12 @@ def main():
     access_key = os.environ['EC2_ACCESS_KEY']
     secret_key = os.environ['EC2_SECRET_KEY']
 
+    global inside_access
+    if os.environ['EC2_URL'] == ec2_inside_url:
+        inside_access = True
+    else:
+        inside_access = False
+
     try:
         total_insts = int(sys.argv[1]) 
     except (ValueError, IndexError):
@@ -98,10 +112,10 @@ def main():
     images = connection.get_all_images()
     # kernels = connection.get_all_kernels()
     keys = connection.get_all_key_pairs()
-    instances = frozenset()
+    instances = None
     # NFS server
     server_inst = None
-    server_set = frozenset()
+    server_set = None
 
     if total_insts > 0:
         for img in images:
@@ -132,27 +146,31 @@ def main():
         print
     else:
         # find all the already running instances
+        tmp_insts = []
         for res in all_reservations:
             if res.owner_id == my_id:
                 for inst in res.instances:
                     if inst.key_name == key_name:
-                        instances.append(inst) 
+                        tmp_insts.append(inst) 
 
+        instances = frozenset(tmp_insts)
     # marking which instance will be the NFS server
     for inst in instances:
         if inst.ami_launch_index == '0':
             inst.tags = {'server':True}
             server_inst = inst
-            server_set = frozenset(server_inst)
+            server_set = frozenset([server_inst])
         else:
             inst.tags = {'server':False}
 
     print("Setting up instances. This will be another few minutes.")
 
-    file_tuples = (('./server.patch', 'server.patch'), 
-                   ('./phantom.patch', 'phantom/phantom.patch'))
-    command = """sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server &&\
+    file_tuples = [('./server.patch', 'server.patch'), 
+                   ('./phantom.patch', 'phantom.patch')]
+    command = """sudo apt-get update &&\
+    sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server &&\
     git svn clone -s http://phantom.googlecode.com/svn phantom &&\
+    mv phantom.patch phantom/ &&\
     cd phantom &&\
     patch -p1 < phantom.patch &&\
     cd protos &&\
@@ -168,9 +186,13 @@ def main():
     sudo service idmapd --full-restart &&\
     sudo service statd --full-restart &&\
     sudo service nfs-kernel-server --full-restart"""
-    run_command_on_instances(command, server_set, file_tuples)
+    results = run_command_on_instances(command, server_set, file_tuples)
+    for inst in results:
+        print "-----Start single instance output-----"
+        for line in inst:
+            print "\t", line,
 
-    file_tuples = (('./client.patch', 'client.patch'))
+    file_tuples = [('./client.patch', 'client.patch')]
     command = """sudo apt-get -y install nfs-common libprotobuf-c0 &&\
     sudo useradd phantom_user &&\
     cd /etc &&\
@@ -181,7 +203,11 @@ def main():
     cd &&\
     mkdir phantom &&\
     sudo mount -t nfs4 """ + server_inst.private_dns_name + """:/ /home/ubuntu/phantom"""
-    run_command_on_instances(command, instances - server_set, file_tuples)
+    results = run_command_on_instances(command, instances - server_set, file_tuples)
+    for inst in results:
+        print "-----Start single instance output-----"
+        for line in inst:
+            print "\t", line,
 
     # get hostnames to create network to seed KAD
     command = "hostname"
@@ -189,16 +215,26 @@ def main():
 
     hostnames = ""
     for inst in results:
-        hostnames = inst.results[0].split('\n')[0] + " " + hostnames
+        hostnames = inst[0].split('\n')[0] + " " + hostnames
 
     command = """cd phantom/src/test &&\
     rm *.pem *.list *.conf *.data &&\
     ./gencerts.sh '""" + hostnames + """' &&\
     ./genkadnodes-list.sh"""
-    run_command_on_instances(command, server_set)
+    results = run_command_on_instances(command, server_set)
+    for inst in results:
+        print "-----Start single instance output-----"
+        for line in inst:
+            print "\t", line,
 
-
-# pdb.set_trace()
+    command = """echo "screen
+stuff 'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015'" > phantom.screenrc &&\
+    screen -d -m -c phantom.screenrc"""
+    results = run_command_on_instances(command, instances)
+    for inst in results:
+        print "-----Start single instance output-----"
+        for line in inst:
+            print "\t", line,
 
 
 # # stop all instances
@@ -208,3 +244,5 @@ def main():
 
 if __name__ == '__main__':
     main()
+
+# pdb.set_trace()
