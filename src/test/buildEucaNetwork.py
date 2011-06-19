@@ -38,36 +38,50 @@ class CommandInstance(Thread):
     def __init__ (self, instance):
         Thread.__init__(self)
         self.instance = instance
-        self.ssh = paramiko.SSHClient()
+        self.client = paramiko.SSHClient()
         self.hostname = instance.dns_name
         self.ssh_port = 22
         if not inside_access:
             self.hostname = "128.111.48.6"
             self.ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
-        self.ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.command = ""
         self.results = []
 
-    def set_command(self, command, file_tuples):
-        self.command = command
+    def set_command(self, command_list, file_tuples):
+        self.command_list = command_list
         self.file_tuples = file_tuples
 
     def run(self):
-        self.ssh.connect(self.hostname, 
-                         self.ssh_port, 
-                         img_username, 
-                         key_filename=key_filename)
-        ftp = self.ssh.open_sftp()
+        self.client.connect(self.hostname, 
+                            self.ssh_port, 
+                            img_username, 
+                            key_filename=key_filename)
+        ftp = self.client.open_sftp()
         for src, dest in self.file_tuples:
             ftp.put(src, dest)
-        stdin, stdout, stderr = self.ssh.exec_command(self.command)
+
+        cmd_str = ""
+
+        chan = self.client.get_transport().open_session()
+        chan.set_combine_stderr(True)
+        for command in self.command_list:
+            if cmd_str == "":
+                cmd_str = command
+            else:
+                cmd_str = cmd_str + " && " + command 
+
+        chan.exec_command(cmd_str)
+        if chan.recv_exit_status() != 0:
+            print "\t chain of commands"
+            print "\t %s" % cmd_str
+            print "\t had a non-zero return code" 
+        stdout = chan.makefile('rb')
         self.results = stdout.readlines()
         ftp.close()
-        self.ssh.close()
-        # print stdout.readlines()
+        self.client.close()
 
 def run_command_on_instances(command, instances, file_tuples=[]):
-    print file_tuples
     cmd_inst_threads = []
     for inst in instances:
         current = CommandInstance(inst)
@@ -79,6 +93,10 @@ def run_command_on_instances(command, instances, file_tuples=[]):
     for thread in cmd_inst_threads:
         thread.join()
         results.append(thread.results)
+
+        print "-----Start single instance output-----"
+        for line in thread.results:
+            print "\t", line,
 
     return results
 
@@ -144,6 +162,71 @@ def main():
             time.sleep(15)
 
         print
+        print("Setting up instances. This will be another few minutes.")
+
+        # marking which instance will be the NFS server
+        for inst in instances:
+            if inst.ami_launch_index == '0':
+                inst.tags = {'server':True}
+                server_inst = inst
+                server_set = frozenset([server_inst])
+            else:
+                inst.tags = {'server':False}
+
+        file_tuples = [('./server.patch', 'server.patch'), 
+                       ('./phantom.patch', 'phantom.patch')]
+        command = ['sudo apt-get update',
+                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server',
+                   'git svn clone -s http://phantom.googlecode.com/svn phantom',
+                   'mv phantom.patch phantom/',
+                   'cd phantom',
+                   'patch -p1 < phantom.patch',
+                   'cd protos',
+                   './generate_protos.sh',
+                   'cd ../src',
+                   'make',
+                   'cd ~/phantom/scripts',
+                   'make',
+                   'sudo useradd phantom_user',
+                   'sudo bash ./phantom.sh start',
+                   'cd /etc',
+                   'sudo patch -p1 < ~/server.patch',
+                   'sudo service idmapd --full-restart',
+                   'sudo service statd --full-restart',
+                   'sudo service nfs-kernel-server --full-restart']
+        run_command_on_instances(command, server_set, file_tuples)
+
+        file_tuples = [('./client.patch', 'client.patch')]
+        command = ['sudo apt-get -y install nfs-common libprotobuf-c0',
+                   'sudo useradd phantom_user',
+                   'cd /etc',
+                   'sudo patch -p1 < ~/client.patch',
+                   'sudo service idmapd --full-restart',
+                   'sudo service statd --full-restart', 
+                   'sudo modprobe nfs',
+                   'cd',
+                   'mkdir phantom',
+                   'sudo mount -t nfs4 ' + server_inst.private_dns_name + ':/ /home/ubuntu/phantom']
+        run_command_on_instances(command, instances - server_set, file_tuples)
+
+        # get hostnames to create network to seed KAD
+        command = ["hostname"]
+        results = run_command_on_instances(command, instances)
+        hostnames = ""
+        for inst in results:
+            hostnames = inst[0].split('\n')[0] + " " + hostnames
+
+        command = ['cd phantom/src/test',
+                   'rm -f *.pem *.list *.conf *.data',
+                   './gencerts.sh "' + hostnames + '"',
+                   './genkadnodes-list.sh']
+        run_command_on_instances(command, server_set)
+
+        command = ['echo "screen\n' 
+                   + 'stuff \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015\'" > phantom.screenrc',
+                   'screen -d -m -c phantom.screenrc']
+        run_command_on_instances(command, instances)
+
     else:
         # find all the already running instances
         tmp_insts = []
@@ -154,87 +237,14 @@ def main():
                         tmp_insts.append(inst) 
 
         instances = frozenset(tmp_insts)
-    # marking which instance will be the NFS server
-    for inst in instances:
-        if inst.ami_launch_index == '0':
-            inst.tags = {'server':True}
-            server_inst = inst
-            server_set = frozenset([server_inst])
-        else:
-            inst.tags = {'server':False}
 
-    print("Setting up instances. This will be another few minutes.")
-
-    file_tuples = [('./server.patch', 'server.patch'), 
-                   ('./phantom.patch', 'phantom.patch')]
-    command = """sudo apt-get update &&\
-    sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server &&\
-    git svn clone -s http://phantom.googlecode.com/svn phantom &&\
-    mv phantom.patch phantom/ &&\
-    cd phantom &&\
-    patch -p1 < phantom.patch &&\
-    cd protos &&\
-    ./generate_protos.sh &&\
-    cd ../src &&\
-    make &&\
-    cd ~/phantom/scripts &&\
-    make &&\
-    sudo useradd phantom_user &&\
-    sudo bash ./phantom.sh start &&\
-    cd /etc &&\
-    sudo patch -p1 < ~/server.patch &&\
-    sudo service idmapd --full-restart &&\
-    sudo service statd --full-restart &&\
-    sudo service nfs-kernel-server --full-restart"""
-    results = run_command_on_instances(command, server_set, file_tuples)
-    for inst in results:
-        print "-----Start single instance output-----"
-        for line in inst:
-            print "\t", line,
-
-    file_tuples = [('./client.patch', 'client.patch')]
-    command = """sudo apt-get -y install nfs-common libprotobuf-c0 &&\
-    sudo useradd phantom_user &&\
-    cd /etc &&\
-    sudo patch -p1 < ~/client.patch &&\
-    sudo service idmapd --full-restart &&\
-    sudo service statd --full-restart &&\ 
-    sudo modprobe nfs &&\
-    cd &&\
-    mkdir phantom &&\
-    sudo mount -t nfs4 """ + server_inst.private_dns_name + """:/ /home/ubuntu/phantom"""
-    results = run_command_on_instances(command, instances - server_set, file_tuples)
-    for inst in results:
-        print "-----Start single instance output-----"
-        for line in inst:
-            print "\t", line,
-
-    # get hostnames to create network to seed KAD
-    command = "hostname"
-    results = run_command_on_instances(command, instances)
-
-    hostnames = ""
-    for inst in results:
-        hostnames = inst[0].split('\n')[0] + " " + hostnames
-
-    command = """cd phantom/src/test &&\
-    rm *.pem *.list *.conf *.data &&\
-    ./gencerts.sh '""" + hostnames + """' &&\
-    ./genkadnodes-list.sh"""
-    results = run_command_on_instances(command, server_set)
-    for inst in results:
-        print "-----Start single instance output-----"
-        for line in inst:
-            print "\t", line,
-
-    command = """echo "screen
-stuff 'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015'" > phantom.screenrc &&\
-    screen -d -m -c phantom.screenrc"""
-    results = run_command_on_instances(command, instances)
-    for inst in results:
-        print "-----Start single instance output-----"
-        for line in inst:
-            print "\t", line,
+    # drop to a shell when everything is done
+    while True:
+        cmd = raw_input("specify a command to run on all instances (remember, shell state is not saved between commands) \n# ")
+        if cmd == "quit" or cmd == "exit":
+            break
+        
+        run_command_on_instances([cmd], instances)
 
 
 # # stop all instances
