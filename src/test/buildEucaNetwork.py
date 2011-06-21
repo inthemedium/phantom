@@ -179,16 +179,32 @@ def main():
             else:
                 inst.tags = {'server':False}
 
-        file_tuples = [('./server.patch', 'server.patch'), 
-                       ('./phantom.patch', 'phantom.patch'),
+        # install development tools on all instances
+        command = ['sudo apt-get -y update',
+                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler']
+        run_command_on_instances(command, instances)
+
+        # configure easier ssh for nodes and needed to download/upload github source
+        file_tuples = [('./home.patch', 'home.patch'),
                        (key_filename, '.ssh/id_rsa')]
-        command = ['sudo apt-get update',
-                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server',
-                   'chmod 600 ~/.ssh/id_rsa',
+        command = ['chmod 600 ~/.ssh/id_rsa',
+                   'patch -p1 < home.patch']
+        run_command_on_instances(command, instances, file_tuples)
+
+
+        # configure the nfs server
+        file_tuples = [('./server.patch', 'server.patch')]
+        command = ['sudo apt-get -y install nfs-kernel-server',
                    'cd /',
                    'sudo patch -p1 < ~/server.patch',
-                   'cd',
-                   fetch_src_cmd,
+                   'sudo service idmapd --full-restart',
+                   'sudo service statd --full-restart',
+                   'sudo service nfs-kernel-server --full-restart']
+        run_command_on_instances(command, server_set, file_tuples)
+
+        # build the phantom source
+        file_tuples = [('./phantom.patch', 'phantom.patch')]
+        command = [fetch_src_cmd,
                    'mv phantom.patch phantom/',
                    'cd phantom',
                    'patch -p1 < phantom.patch',
@@ -196,18 +212,13 @@ def main():
                    './generate_protos.sh',
                    'cd ../src',
                    'make',
-                   'cd ~/phantom/scripts',
-                   'make',
-                   'sudo useradd phantom_user',
-                   'sudo bash ./phantom.sh start',
-                   'sudo service idmapd --full-restart',
-                   'sudo service statd --full-restart',
-                   'sudo service nfs-kernel-server --full-restart']
+                   'cd ../scripts',
+                   'make']
         run_command_on_instances(command, server_set, file_tuples)
 
+        # configure and mount the nfs share
         file_tuples = [('./client.patch', 'client.patch')]
-        command = ['sudo apt-get -y install nfs-common libprotobuf-c0',
-                   'sudo useradd phantom_user',
+        command = ['sudo apt-get -y install nfs-common',
                    'cd /etc',
                    'sudo patch -p1 < ~/client.patch',
                    'sudo service idmapd --full-restart',
@@ -225,16 +236,22 @@ def main():
         for inst in results:
             hostnames = inst[0].split('\n')[0] + " " + hostnames
 
+
+        # generate certs and kad info
         command = ['cd phantom/src/test',
                    'rm -f *.pem *.list *.conf *.data',
                    './gencerts.sh "' + hostnames + '"',
                    './genkadnodes-list.sh']
         run_command_on_instances(command, server_set)
 
-        command = ['echo "screen\n' 
+        command = ['cd ~/phantom/scripts',
+                   'sudo useradd phantom_user',
+                   'sudo bash ./phantom.sh start',
+                   'cd',
+                   'echo "screen\n' 
                    + 'stuff \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015\'" > phantom.screenrc',
                    'screen -d -m -c phantom.screenrc']
-        Run_command_on_instances(command, instances)
+        run_command_on_instances(command, instances)
 
     else:
         # find all the already running instances

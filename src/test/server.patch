@@ -1,4 +1,4 @@
-diff --git a/default/nfs-common b/default/nfs-common
+diff --git a/etc/default/nfs-common b/etc/default/nfs-common
 index 52f7f91..c0a1735 100644
 --- a/etc/default/nfs-common
 +++ b/etc/default/nfs-common
@@ -12,7 +12,7 @@ index 52f7f91..c0a1735 100644
  # Do you want to start the gssd daemon? It is required for Kerberos mounts.
 -NEED_GSSD=
 +NEED_GSSD=no
-diff --git a/exports b/exports
+diff --git a/etc/exports b/etc/exports
 index 9bff680..757f6ce 100644
 --- a/etc/exports
 +++ b/etc/exports
@@ -21,16 +21,3 @@ index 9bff680..757f6ce 100644
  # /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
  #
 +/home/ubuntu/phantom 172.19.1.0/24(rw,fsid=0,insecure,no_subtree_check,async)
-diff --git a/config b/config
-new file mode 100644
-index 0000000..ed2637b
---- /dev/null
-+++ b/home/ubuntu/.ssh/config
-@@ -0,0 +1,7 @@
-+host github.com
-+StrictHostKeyChecking no
-+
-+Host 172.19.1.*
-+User ubuntu
-+Port 22
-+StrictHostKeyChecking no

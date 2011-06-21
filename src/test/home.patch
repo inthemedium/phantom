@@ -1,0 +1,13 @@
+diff --git a/.ssh/config b/.ssh/config
+new file mode 100644
+index 0000000..ed2637b
+--- /dev/null
++++ b/.ssh/config
+@@ -0,0 +1,7 @@
++host github.com
++StrictHostKeyChecking no
++
++Host 172.19.1.*
++User ubuntu
++Port 22
++StrictHostKeyChecking no
