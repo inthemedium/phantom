@@ -20,6 +20,7 @@ import boto.ec2
 import paramiko
 from pprint import pprint
 from threading import Thread
+import readline
 
 # Global vars 
 img_id = "emi-3F101642"
@@ -233,7 +234,7 @@ def main():
         command = ['echo "screen\n' 
                    + 'stuff \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015\'" > phantom.screenrc',
                    'screen -d -m -c phantom.screenrc']
-        run_command_on_instances(command, instances)
+        Run_command_on_instances(command, instances)
 
     else:
         # find all the already running instances
