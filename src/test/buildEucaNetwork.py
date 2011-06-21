@@ -34,6 +34,11 @@ inside_access = None
 # hard-coded for now
 my_id = "inthemedium"
 
+# # official repo
+# fetch_src_cmd = 'git svn clone -s http://phantom.googlecode.com/svn phantom'
+# my repo
+fetch_src_cmd = 'git clone git@github.com:inthemedium/phantom.git'
+
 class CommandInstance(Thread):
     def __init__ (self, instance):
         Thread.__init__(self)
@@ -174,10 +179,15 @@ def main():
                 inst.tags = {'server':False}
 
         file_tuples = [('./server.patch', 'server.patch'), 
-                       ('./phantom.patch', 'phantom.patch')]
+                       ('./phantom.patch', 'phantom.patch'),
+                       (key_filename, '.ssh/id_rsa')]
         command = ['sudo apt-get update',
                    'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler nfs-kernel-server',
-                   'git svn clone -s http://phantom.googlecode.com/svn phantom',
+                   'chmod 600 ~/.ssh/id_rsa',
+                   'cd /',
+                   'sudo patch -p1 < ~/server.patch',
+                   'cd',
+                   fetch_src_cmd,
                    'mv phantom.patch phantom/',
                    'cd phantom',
                    'patch -p1 < phantom.patch',
@@ -189,8 +199,6 @@ def main():
                    'make',
                    'sudo useradd phantom_user',
                    'sudo bash ./phantom.sh start',
-                   'cd /etc',
-                   'sudo patch -p1 < ~/server.patch',
                    'sudo service idmapd --full-restart',
                    'sudo service statd --full-restart',
                    'sudo service nfs-kernel-server --full-restart']
