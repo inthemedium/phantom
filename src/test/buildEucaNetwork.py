@@ -5,7 +5,7 @@
 # where num_inst is the number of instances to launch, if it is not present the currently running instances will have commands run on them
 
 # In order for this script to work you will need to do the following:
-# 1. install boto and paramiko python modules
+# 1. install boto, paramiko, and (optional) ipython python modules
 # 2. generate a key named 'phantom' on eucalyptus and place it at '~/.euca/id_phantom'
 # 3. setup euca2ools such that the environment variables 'EC2_URL', 'EC2_ACCESS_KEY', and 'EC2_SECRET_KEY' key are defined
 # 4. change the my_id to your eucalpytus username
@@ -40,6 +40,19 @@ my_id = "inthemedium"
 # my repo
 fetch_src_cmd = 'git clone git@github.com:inthemedium/phantom.git'
 
+# utility class
+class Bunch(dict):
+    def __init__(self, **kw):
+        dict.__init__(self, kw)
+        self.__dict__ = self
+
+    def __getstate__(self):
+        return self
+
+    def __setstate__(self, state):
+        self.update(state)
+        self.__dict__ = self
+
 class CommandInstance(Thread):
     def __init__ (self, instance):
         Thread.__init__(self)
@@ -52,7 +65,7 @@ class CommandInstance(Thread):
             self.ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.command = ""
-        self.results = []
+        self.results = Bunch()
 
     def set_command(self, command_list, file_tuples):
         self.command_list = command_list
@@ -78,12 +91,14 @@ class CommandInstance(Thread):
                 cmd_str = cmd_str + " && " + command 
 
         chan.exec_command(cmd_str)
-        if chan.recv_exit_status() != 0:
-            print "\t chain of commands"
-            print "\t %s" % cmd_str
-            print "\t had a non-zero return code" 
+
+        # prepare results
         stdout = chan.makefile('rb')
-        self.results = stdout.readlines()
+        self.results.command = cmd_str
+        self.results.exit_status = chan.recv_exit_status()
+        self.results.hostname = self.instance.dns_name
+        self.results.instance = self.instance
+        self.results.output = stdout.readlines()
         ftp.close()
         self.client.close()
 
@@ -99,10 +114,6 @@ def run_command_on_instances(command, instances, file_tuples=[]):
     for thread in cmd_inst_threads:
         thread.join()
         results.append(thread.results)
-
-        print "-----Start single instance output-----"
-        for line in thread.results:
-            print "\t", line,
 
     return results
 
@@ -182,14 +193,14 @@ def main():
         # install development tools on all instances
         command = ['sudo apt-get -y update',
                    'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler']
-        run_command_on_instances(command, instances)
+        pprint(run_command_on_instances(command, instances))
 
         # configure easier ssh for nodes and needed to download/upload github source
         file_tuples = [('./home.patch', 'home.patch'),
                        (key_filename, '.ssh/id_rsa')]
         command = ['chmod 600 ~/.ssh/id_rsa',
                    'patch -p1 < home.patch']
-        run_command_on_instances(command, instances, file_tuples)
+        pprint(run_command_on_instances(command, instances, file_tuples))
 
 
         # configure the nfs server
@@ -200,7 +211,7 @@ def main():
                    'sudo service idmapd --full-restart',
                    'sudo service statd --full-restart',
                    'sudo service nfs-kernel-server --full-restart']
-        run_command_on_instances(command, server_set, file_tuples)
+        pprint(run_command_on_instances(command, server_set, file_tuples))
 
         # build the phantom source
         file_tuples = [('./phantom.patch', 'phantom.patch')]
@@ -214,7 +225,7 @@ def main():
                    'make',
                    'cd ../scripts',
                    'make']
-        run_command_on_instances(command, server_set, file_tuples)
+        pprint(run_command_on_instances(command, server_set, file_tuples))
 
         # configure and mount the nfs share
         file_tuples = [('./client.patch', 'client.patch')]
@@ -227,7 +238,7 @@ def main():
                    'cd',
                    'mkdir phantom',
                    'sudo mount -t nfs4 ' + server_inst.private_dns_name + ':/ /home/ubuntu/phantom']
-        run_command_on_instances(command, instances - server_set, file_tuples)
+        pprint(run_command_on_instances(command, instances - server_set, file_tuples))
 
         # get hostnames to create network to seed KAD
         command = ["hostname"]
@@ -242,7 +253,7 @@ def main():
                    'rm -f *.pem *.list *.conf *.data',
                    './gencerts.sh "' + hostnames + '"',
                    './genkadnodes-list.sh']
-        run_command_on_instances(command, server_set)
+        pprint(run_command_on_instances(command, server_set))
 
         command = ['cd ~/phantom/scripts',
                    'sudo useradd phantom_user',
@@ -251,7 +262,7 @@ def main():
                    'echo "screen\n' 
                    + 'stuff \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015\'" > phantom.screenrc',
                    'screen -d -m -c phantom.screenrc']
-        run_command_on_instances(command, instances)
+        pprint(run_command_on_instances(command, instances))
 
     else:
         # find all the already running instances
@@ -269,8 +280,16 @@ def main():
         cmd = raw_input("specify a command to run on all instances (remember, shell state is not saved between commands) \n# ")
         if cmd == "quit" or cmd == "exit":
             break
-        
-        run_command_on_instances([cmd], instances)
+
+        results = run_command_on_instances([cmd], instances)
+        pprint(results)
+        if raw_input('run ipython with results? (y/n) ') == 'y':
+ 
+            # run embedded ipython shell on results
+            from IPython.Shell import IPShellEmbed
+
+            ipshell = IPShellEmbed()
+            ipshell()
 
 
 # # stop all instances
