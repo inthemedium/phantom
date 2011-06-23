@@ -22,7 +22,7 @@ from pprint import pprint
 from threading import Thread
 import readline
 
-# Global vars 
+# Global vars
 img_id = "emi-3F101642"
 img_username = "ubuntu"
 
@@ -72,9 +72,9 @@ class CommandInstance(Thread):
         self.file_tuples = file_tuples
 
     def run(self):
-        self.client.connect(self.hostname, 
-                            self.ssh_port, 
-                            img_username, 
+        self.client.connect(self.hostname,
+                            self.ssh_port,
+                            img_username,
                             key_filename=key_filename)
         ftp = self.client.open_sftp()
         for src, dest in self.file_tuples:
@@ -88,7 +88,7 @@ class CommandInstance(Thread):
             if cmd_str == "":
                 cmd_str = command
             else:
-                cmd_str = cmd_str + " && " + command 
+                cmd_str = cmd_str + " && " + command
 
         chan.exec_command(cmd_str)
 
@@ -109,7 +109,7 @@ def run_command_on_instances(command, instances, file_tuples=[]):
         current.set_command(command, file_tuples)
         cmd_inst_threads.append(current)
         current.start()
-    
+
     results = []
     for thread in cmd_inst_threads:
         thread.join()
@@ -130,7 +130,7 @@ def main():
         inside_access = False
 
     try:
-        total_insts = int(sys.argv[1]) 
+        total_insts = int(sys.argv[1])
     except (ValueError, IndexError):
         total_insts = 0
 
@@ -233,7 +233,7 @@ def main():
                    'cd /etc',
                    'sudo patch -p1 < ~/client.patch',
                    'sudo service idmapd --full-restart',
-                   'sudo service statd --full-restart', 
+                   'sudo service statd --full-restart',
                    'sudo modprobe nfs',
                    'cd',
                    'mkdir phantom',
@@ -289,7 +289,7 @@ def main():
             if res.owner_id == my_id:
                 for inst in res.instances:
                     if inst.key_name == key_name:
-                        tmp_insts.append(inst) 
+                        tmp_insts.append(inst)
 
         instances = frozenset(tmp_insts)
 
@@ -302,7 +302,7 @@ def main():
         results = run_command_on_instances([cmd], instances)
         pprint(results)
         if raw_input('run ipython with results? (y/n) ') == 'y':
- 
+
             # run embedded ipython shell on results
             from IPython.Shell import IPShellEmbed
 

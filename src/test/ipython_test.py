@@ -1,6 +1,6 @@
 # this is an example script that can be run with execfile('ipython_test.py') from inside the ipython embedded shell
 phantom_addrs = run_command_on_instances(['ifconfig phantom | grep inet | cut -d: -f2- | cut -d\/ -f1'], instances)
-        
+
 ping_mat = {}
 problem_instances = set(instances)
 for result in phantom_addrs:

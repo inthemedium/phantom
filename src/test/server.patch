@@ -4,11 +4,11 @@ index 52f7f91..c0a1735 100644
 +++ b/etc/default/nfs-common
 @@ -13,7 +13,7 @@ NEED_STATD=
  STATDOPTS=
- 
+
  # Do you want to start the idmapd daemon? It is only needed for NFSv4.
 -NEED_IDMAPD=
 +NEED_IDMAPD=yes
- 
+
  # Do you want to start the gssd daemon? It is required for Kerberos mounts.
 -NEED_GSSD=
 +NEED_GSSD=no

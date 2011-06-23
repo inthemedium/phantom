@@ -8,7 +8,7 @@ index f027a81..d77823a 100644
  USER=phantom_user
 -TUNCTL=/path/to/tunnel_binary
 +TUNCTL=./tunnel
- 
+
  start() {
  	echo start
 diff --git a/source/src/test/gencerts.sh b/source/src/test/gencerts.sh
@@ -28,7 +28,7 @@ index e00e8ec..7ebecdb 100755
 +fi
 +
 +echo $HOSTS
- 
+
  CERTPOSTS="cc pbc rc"
  for i in $HOSTS;
 @@ -8,7 +18,14 @@ for i in $HOSTS;
@@ -46,4 +46,4 @@ index e00e8ec..7ebecdb 100755
 +	fi
  cat << EOF > $i.conf
  <?xml version="1.0" encoding="iso-8859-1" ?>
- 
+
