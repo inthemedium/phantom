@@ -3,3 +3,5 @@ command = ['tmux copy-mode -t phantom\; send-keys \'M->\' C-e C-space \'M-<\' C-
            'tmux save-buffer /tmp/foo',
            'cat /tmp/foo']
 pprint(run_command_on_instances(command, instances))
+# straight bash version:
+# tmux copy-mode -t phantom\; send-keys 'M->' C-e C-space 'M-<' C-a C-w && tmux save-buffer /tmp/foo && cat /tmp/foo
