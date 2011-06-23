@@ -5,7 +5,7 @@
 # where num_inst is the number of instances to launch, if it is not present the currently running instances will have commands run on them
 
 # In order for this script to work you will need to do the following:
-# 1. install boto, paramiko, and (optional) ipython python modules
+# 1. install boto, paramiko, and (optional) ipython python modules (debian based distros: apt-get install python-boto python-paramiko ipython)
 # 2. generate a key named 'phantom' on eucalyptus and place it at '~/.euca/id_phantom'
 # 3. setup euca2ools such that the environment variables 'EC2_URL', 'EC2_ACCESS_KEY', and 'EC2_SECRET_KEY' key are defined
 # 4. change the my_id to your eucalpytus username
@@ -245,7 +245,7 @@ def main():
         results = run_command_on_instances(command, instances)
         hostnames = ""
         for inst in results:
-            hostnames = inst[0].split('\n')[0] + " " + hostnames
+            hostnames = inst.output[0].split('\n')[0] + " " + hostnames
 
 
         # generate certs and kad info
@@ -255,13 +255,26 @@ def main():
                    './genkadnodes-list.sh']
         pprint(run_command_on_instances(command, server_set))
 
+        # screen is just too hard to deal with, install tmux with the features we need (mux in 10.04 is too outdated)
+        # change this to a simple apt-get install mux with >= 11.10
+        command = ['sudo apt-get -y install libncurses5-dev libevent-dev',
+                   'wget http://sourceforge.net/projects/tmux/files/tmux/tmux-1.4/tmux-1.4.tar.gz',
+                   'tar xvzf tmux-1.4.tar.gz',
+                   'cd tmux-1.4',
+                   './configure',
+                   'make',
+                   'sudo make install']
+        pprint(run_command_on_instances(command, instances))
+
         command = ['cd ~/phantom/scripts',
                    'sudo useradd phantom_user',
                    'sudo bash ./phantom.sh start',
                    'cd',
-                   'echo "screen\n' 
-                   + 'stuff \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\015\'" > phantom.screenrc',
-                   'screen -d -m -c phantom.screenrc']
+                   'tmux new-session -d -s phantom -n phantom',
+                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
+                   'tmux copy-mode -t phantom\; send-keys \'M->\' C-e C-space \'M-<\' C-a C-w',
+                   'tmux save-buffer /tmp/foo',
+                   'cat /tmp/foo']
         pprint(run_command_on_instances(command, instances))
 
     else:
