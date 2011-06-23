@@ -257,24 +257,29 @@ def main():
 
         # screen is just too hard to deal with, install tmux with the features we need (mux in 10.04 is too outdated)
         # change this to a simple apt-get install mux with >= 11.10
+        command = ['wget http://sourceforge.net/projects/tmux/files/tmux/tmux-1.4/tmux-1.4.tar.gz',
+                   'cd phantom',
+                   'tar xvzf ../tmux-1.4.tar.gz']
+        pprint(run_command_on_instances(command, server_set))
+
         command = ['sudo apt-get -y install libncurses5-dev libevent-dev',
-                   'wget http://sourceforge.net/projects/tmux/files/tmux/tmux-1.4/tmux-1.4.tar.gz',
-                   'tar xvzf tmux-1.4.tar.gz',
+                   'cp -r phantom/tmux-1.4 ./',
                    'cd tmux-1.4',
                    './configure',
                    'make',
                    'sudo make install']
         pprint(run_command_on_instances(command, instances))
 
+        command = ['rm -rf phantom/tmux-1.4']
+        pprint(run_command_on_instances(command, server_set))
+
+        # bring up tun interface and then phantom in a tmux session
         command = ['cd ~/phantom/scripts',
                    'sudo useradd phantom_user',
                    'sudo bash ./phantom.sh start',
                    'cd',
                    'tmux new-session -d -s phantom -n phantom',
-                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
-                   'tmux copy-mode -t phantom\; send-keys \'M->\' C-e C-space \'M-<\' C-a C-w',
-                   'tmux save-buffer /tmp/foo',
-                   'cat /tmp/foo']
+                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m']
         pprint(run_command_on_instances(command, instances))
 
     else:
