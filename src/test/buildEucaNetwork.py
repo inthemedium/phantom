@@ -192,7 +192,7 @@ def main():
 
         # install development tools on all instances
         command = ['sudo apt-get -y update',
-                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler']
+                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler gdb']
         pprint(run_command_on_instances(command, instances))
 
         # configure easier ssh for nodes and needed to download/upload github source
@@ -279,7 +279,8 @@ def main():
                    'sudo bash ./phantom.sh start',
                    'cd',
                    'tmux new-session -d -s phantom -n phantom',
-                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m']
+                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
+                   'tmux bind-key C-b last-window']
         pprint(run_command_on_instances(command, instances))
 
     else:
