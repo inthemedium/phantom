@@ -279,7 +279,8 @@ def main():
                    'sudo bash ./phantom.sh start',
                    'cd',
                    'tmux new-session -d -s phantom -n phantom',
-                   'tmux send-keys -t phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
+                   'tmux new-window -t phantom: -n misc',
+                   'tmux send-keys -t phantom:phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
                    'tmux bind-key C-b last-window']
         pprint(run_command_on_instances(command, instances))
 

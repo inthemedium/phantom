@@ -1,4 +1,6 @@
 # this is an example script that can be run with execfile('ipython_test.py') from inside the ipython embedded shell
+import re
+
 phantom_addrs = run_command_on_instances(['ifconfig phantom | grep inet | cut -d: -f2- | cut -d\/ -f1'], instances)
 
 ping_mat = {}
@@ -20,11 +22,31 @@ for result in phantom_addrs:
             except KeyError:
                 pass
 
-def pprint_mat(mat):
+command = ['tmux copy-mode -t phantom:phantom\; send-keys \'M->\' C-e C-space \'M-<\' C-a C-w',
+           'tmux save-buffer -t phantom /tmp/foo',
+           'tail -n +0 /tmp/foo']
+tmux_dump = run_command_on_instances(command, instances)
+
+node_types = {}
+
+for inst in tmux_dump:
+    try:
+        out_str = "".join(inst.output)
+        ipv6_addr = re.search(r"path built successfully, have ap (.*)", out_str).group(1)
+        cons_path = re.search(r"starting to construct (entry|exit)-path", out_str).group(1)
+        node_types[ipv6_addr] = cons_path
+    except AttributeError:
+        pass
+
+def pprint_mat(mat, node_types):
     for i in sorted(mat.keys()):
         print i + '\t\t',
+        try:
+            print node_types[i] + '\t\t',
+        except KeyError:
+            print '????' + '\t\t',
         for j in sorted(mat[i].keys()):
             print mat[i][j],
         print
-pprint_mat(ping_mat)
+pprint_mat(ping_mat, node_types)
 pprint(problem_instances)
