@@ -5,10 +5,10 @@ try:
 except (NameError):
     tail_size = '+0'
 
-command = ['tmux copy-mode -t phantom:phantom\; send-keys \'M->\' C-e C-space \'M-<\' C-a C-w',
+command = ['tmux copy-mode -t phantom:phantom\; send-keys -t phantom:phantom \'M->\' C-e C-space \'M-<\' C-a M-w',
            'tmux save-buffer -t phantom /tmp/foo',
            'tail -n ' + tail_size + ' /tmp/foo']
 output = run_command_on_instances(command, instances)
 pprint(output)
 # straight bash version:
-# tmux copy-mode -t phantom\; send-keys 'M->' C-e C-space 'M-<' C-a C-w && tmux save-buffer /tmp/foo && cat /tmp/foo
+# tmux copy-mode -t phantom\; send-keys -t phantom:phantom 'M->' C-e C-space 'M-<' C-a M-w && tmux save-buffer /tmp/foo && cat /tmp/foo
