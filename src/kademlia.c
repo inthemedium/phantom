@@ -350,7 +350,9 @@ get_n_closest_nodes(int n, const uint8_t *id, const uint8_t *except)
 		idx++;
 	}
 	bzero(tested, NBUCKETS * sizeof (int));
-	for (i = idx; i < NBUCKETS; i++) {
+    /* test the closest bucket to id first, then test
+       the buckets that are closer and closer this node */
+	for (i = idx; i >= 0; i--) {
 		ret = get_bucket_contents(list, i, except, n);
 		tested[i]++;
 		if (ret != 0) {
@@ -361,7 +363,7 @@ get_n_closest_nodes(int n, const uint8_t *id, const uint8_t *except)
 			return list;
 		}
 	}
-	for (i = 0; i < idx; i++) {
+	for (i = idx + 1; i < NBUCKETS; i++) {
 		ret = get_bucket_contents(list, i, except, n);
 		tested[i]++;
 		if (ret != 0) {
