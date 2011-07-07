@@ -633,7 +633,6 @@ mergesort(struct kad_node_info *l, const uint8_t *id)
       l->prev = list_handle;
       list_handle->prev->next = list_handle;
       return list_handle;
-      /* return l; */
     }
     sublist_size <<= 1;
   }
@@ -642,33 +641,10 @@ mergesort(struct kad_node_info *l, const uint8_t *id)
 static void
 sort_list_by_closeness(const uint8_t *id, struct kad_node_list *l)
 {
-  int length_before = 0, length_after = 0, i;
-  struct kad_node_info *help1, *help2;
 	assert(l);
 	assert(l->nentries);
 	assert(id);
-    for(i = 0; i < 20; i++)
-      printf("%02x", l->list.id[i]);
-    printf("\n");
-    LIST_for_all(&l->list, help1, help2){
-      length_before++;
-      for(i = 0; i < 20; i++)
-        printf("%02x", help1->id[i]);
-      printf("\n");
-    }
 	l->list = *mergesort(&l->list, id);
-    printf("\n");
-    for(i = 0; i < 20; i++)
-      printf("%02x", l->list.id[i]);
-    printf("\n");
-    LIST_for_all(&l->list, help1, help2){
-      length_after++;
-      for(i = 0; i < 20; i++)
-        printf("%02x", help1->id[i]);
-      printf("\n");
-    }
-    printf("%d %d\n", length_before, length_after);
-    assert(length_before == length_after);
 }
 #endif
 
