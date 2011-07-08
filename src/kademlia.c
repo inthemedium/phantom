@@ -350,8 +350,8 @@ get_n_closest_nodes(int n, const uint8_t *id, const uint8_t *except)
 		idx++;
 	}
 	bzero(tested, NBUCKETS * sizeof (int));
-    /* test the closest bucket to id first, then test
-       the buckets that are closer and closer this node */
+		/* test the closest bucket to id first, then test
+			 the buckets that are closer and closer this node */
 	for (i = idx; i >= 0; i--) {
 		ret = get_bucket_contents(list, i, except, n);
 		tested[i]++;
@@ -550,92 +550,92 @@ cmp_distance(const uint8_t *a, const uint8_t *b, const uint8_t *key)
 }
 
 /* bottom up merge sort
-   basic idea: http://www.algorithmist.com/index.php/Merge_sort#Bottom-up_merge_sort */
+	 basic idea: http://www.algorithmist.com/index.php/Merge_sort#Bottom-up_merge_sort */
 static struct kad_node_info *
 mergesort(struct kad_node_info *l, const uint8_t *id)
 {
-  struct kad_node_info *p, *q, *cur_small, *prev_small, *head;
-  int sublist_size, nm, np, nq, j;
-  struct kad_node_info *list_handle;
-  /* remove the handle from the list */
-  list_handle = l;
-  l = list_handle->next;
-  l->prev = list_handle->prev;
-  l->prev->next = l;
+	struct kad_node_info *p, *q, *cur_small, *prev_small, *head;
+	int sublist_size, nm, np, nq, j;
+	struct kad_node_info *list_handle;
+	/* remove the handle from the list */
+	list_handle = l;
+	l = list_handle->next;
+	l->prev = list_handle->prev;
+	l->prev->next = l;
 
-  assert(l);
-  sublist_size = 1;
+	assert(l);
+	sublist_size = 1;
 
-  while (1) {
-    head = l;
-    p = l;
-    nm = 0;
-    prev_small = NULL;
-    l = NULL;
-    while (p) {
-      nm++;
-      np = 0;
-      q = p;
-      /* forward the pointer the pointer to the next sublist */
-      for (j = 0; j < sublist_size; j++) {
-        np++;
-        q = (q->next == head) ? NULL : q->next;
-        if (q == NULL) {
-          break;
-        }
-      }
-      nq = sublist_size;
-      /* merge the sublists */
-      while (np > 0 || (nq > 0 && q)) {
-        /* p list is depleted, change list ordering*/
-        if (np == 0) {
-          cur_small = q;
-          q = q->next;
-          nq--;
-          if (q == head) {
-            q = NULL;
-          }
+	while (1) {
+		head = l;
+		p = l;
+		nm = 0;
+		prev_small = NULL;
+		l = NULL;
+		while (p) {
+			nm++;
+			np = 0;
+			q = p;
+			/* forward the pointer the pointer to the next sublist */
+			for (j = 0; j < sublist_size; j++) {
+				np++;
+				q = (q->next == head) ? NULL : q->next;
+				if (q == NULL) {
+					break;
+				}
+			}
+			nq = sublist_size;
+			/* merge the sublists */
+			while (np > 0 || (nq > 0 && q)) {
+				/* p list is depleted, change list ordering*/
+				if (np == 0) {
+					cur_small = q;
+					q = q->next;
+					nq--;
+					if (q == head) {
+						q = NULL;
+					}
 
-        /* q list is depleted, keep list ordering*/
-        } else if (nq == 0 || q == NULL ||
-                   cmp_distance(p->id, q->id, id) <= 0) {
-          cur_small = p;
-          p = p->next;
-          np--;
-          if (p == head) {
-            p = NULL;
-          }
-        /* change list ordering */
-        } else {
-          cur_small = q;
-          q = q->next;
-          nq--;
-          if (q == head) {
-            q = NULL;
-          }
-        }
-        if (prev_small != NULL) {
-          prev_small->next = cur_small;
-        } else {
-          l = cur_small;
-        }
-        cur_small->prev = prev_small;
-        prev_small = cur_small;
-      }
-      p = q;
-    }
-    prev_small->next = l;
-    l->prev = prev_small;
-    if (nm <= 1) {
-      /* add handle back to list */
-      list_handle->next = l;
-      list_handle->prev = l->prev;
-      l->prev = list_handle;
-      list_handle->prev->next = list_handle;
-      return list_handle;
-    }
-    sublist_size <<= 1;
-  }
+				/* q list is depleted, keep list ordering*/
+				} else if (nq == 0 || q == NULL ||
+									 cmp_distance(p->id, q->id, id) <= 0) {
+					cur_small = p;
+					p = p->next;
+					np--;
+					if (p == head) {
+						p = NULL;
+					}
+				/* change list ordering */
+				} else {
+					cur_small = q;
+					q = q->next;
+					nq--;
+					if (q == head) {
+						q = NULL;
+					}
+				}
+				if (prev_small != NULL) {
+					prev_small->next = cur_small;
+				} else {
+					l = cur_small;
+				}
+				cur_small->prev = prev_small;
+				prev_small = cur_small;
+			}
+			p = q;
+		}
+		prev_small->next = l;
+		l->prev = prev_small;
+		if (nm <= 1) {
+			/* add handle back to list */
+			list_handle->next = l;
+			list_handle->prev = l->prev;
+			l->prev = list_handle;
+			list_handle->prev->next = list_handle;
+			return list_handle;
+		}
+		sublist_size <<= 1;
+	}
 }
 
 static void
