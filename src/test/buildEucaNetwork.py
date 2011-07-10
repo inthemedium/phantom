@@ -37,7 +37,7 @@ my_id = "inthemedium"
 # # official repo
 # fetch_src_cmd = 'git svn clone -s http://phantom.googlecode.com/svn phantom'
 # my repo
-fetch_src_cmd = 'git clone -n git@github.com:inthemedium/phantom.git && echo \'* filter=tabspace\nMakefile -filter=tabspace\nmakefile -filter=tabspace\' >> phantom/.git/info/attributes && git config --global filter.tabspace.smudge \'expand -t 2\' && git config --global filter.tabspace.clean \'unexpand -t 2\' && cd phantom && git checkout'
+fetch_src_cmd = 'git clone -n git@github.com:inthemedium/phantom.git && echo \'*.c filter=tabspace\n*.h filter=tabspace\n*.py filter=tabspace\nMakefile -filter=tabspace\nmakefile -filter=tabspace\' >> phantom/.git/info/attributes && git config --global filter.tabspace.smudge \'expand -t 2\' && git config --global filter.tabspace.clean \'unexpand -t 2\' && cd phantom && git checkout'
 
 # utility class
 class Bunch(dict):
@@ -213,11 +213,8 @@ def main():
 				pprint(run_command_on_instances(command, server_set, file_tuples))
 
 				# build the phantom source
-				file_tuples = [('./phantom.patch', 'phantom.patch')]
 				command = [fetch_src_cmd,
-									 'mv phantom.patch phantom/',
 									 'cd phantom',
-									 'patch -p1 < phantom.patch',
 									 'cd protos',
 									 './generate_protos.sh',
 									 'cd ../src',
