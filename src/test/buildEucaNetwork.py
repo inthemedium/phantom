@@ -185,7 +185,7 @@ def main():
                         # change the public ip of the server
                         for a in connection.get_all_addresses():
                             if a.public_ip == nfs_server_eip:
-                                inst.use_ip(a.public_ip)
+                                connection.associate_address(inst.id, a.public_ip)
                         inst.tags = {'server':True}
                         server_inst = inst
                         server_set = frozenset([server_inst])

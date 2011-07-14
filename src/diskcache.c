@@ -101,7 +101,7 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 	if (access(name, R_OK | W_OK) == 0) {
 		int slen = strlen(name);
 		LIST_for_all(&d->files, help1, help2) {
-			if (slen == help->len && ! memcmp(help1->name, name, slen) {
+			if (slen == help->len && ! memcmp(help1->name, name, slen)) {
 				assert(! clock_gettime(CLOCK_REALTIME, &help1->time));
 				pthread_mutex_unlock(&d->lock);
 				free(name);
