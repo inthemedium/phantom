@@ -11,6 +11,8 @@
 # 4. change the my_id to your eucalpytus username
 # 5. run it on the secclound!
 
+# TODO use tags when they are implemented with eucalyptus
+
 import os
 import sys
 import time
@@ -177,7 +179,21 @@ def main():
                                   key_name=key_name,
                                   addressing_type='public')
 
+                # marking which instance will be the NFS server
+                for inst in pub_res.instances:
+                    if inst.ami_launch_index == '0':
+                        # change the public ip of the server
+                        for a in connection.get_all_addresses():
+                            if a.public_ip == nfs_server_eip:
+                                inst.use_ip(a.public_ip)
+                        inst.tags = {'server':True}
+                        server_inst = inst
+                        server_set = frozenset([server_inst])
+                    else:
+                        inst.tags = {'server':False}
+
                 instances = frozenset(pub_res.instances)
+                break
 
         running_insts = 0
 
@@ -196,19 +212,6 @@ def main():
 
         print
         print("Setting up instances. This will be another few minutes.")
-
-        # marking which instance will be the NFS server
-        for inst in instances:
-            if inst.ami_launch_index == '0':
-                # change the public ip of the server
-                for a in connection.get_all_addresses():
-                    if a.public_ip == nfs_server_eip:
-                        inst.use_ip(a.public_ip)
-                inst.tags = {'server':True}
-                server_inst = inst
-                server_set = frozenset([server_inst])
-            else:
-                inst.tags = {'server':False}
 
         # install development tools on all instances
         command = ['sudo apt-get -y update',
@@ -343,4 +346,4 @@ def main():
 if __name__ == '__main__':
     main()
 
-# pdb.set_trace()
+# import pdb; pdb.set_trace()
