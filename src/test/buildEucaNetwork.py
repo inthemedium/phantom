@@ -32,6 +32,9 @@ key_filename = os.path.expanduser('~/.euca/id_' + key_name)
 ec2_inside_url = "http://192.168.48.91:8773/services/Eucalyptus"
 inside_access = None
 
+# public elastic ip address for the nfs server instance
+nfs_server_eip = '192.168.48.3'
+
 # hard-coded for now
 my_id = "inthemedium"
 
@@ -78,12 +81,17 @@ class CommandInstance(Thread):
                                 img_username,
                                 key_filename=key_filename)
         except socket.error:
-            print "trying again with private dns name"
-            self.hostname = self.instance.private_dns_name
-            self.client.connect(self.hostname,
-                                self.ssh_port,
-                                img_username,
-                                key_filename=key_filename)
+            if inside_access:
+                print "trying again with private dns name"
+                self.hostname = self.instance.private_dns_name
+                self.client.connect(self.hostname,
+                                    self.ssh_port,
+                                    img_username,
+                                    key_filename=key_filename)
+            else:
+                print "outside connection failed to", self.hostname,\
+                "port", self.ssh_port
+                raise
         ftp = self.client.open_sftp()
         for src, dest in self.file_tuples:
             ftp.put(src, dest)
@@ -192,6 +200,10 @@ def main():
         # marking which instance will be the NFS server
         for inst in instances:
             if inst.ami_launch_index == '0':
+                # change the public ip of the server
+                for a in connection.get_all_addresses():
+                    if a.public_ip == nfs_server_eip:
+                        inst.use_ip(a.public_ip)
                 inst.tags = {'server':True}
                 server_inst = inst
                 server_set = frozenset([server_inst])
