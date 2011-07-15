@@ -179,19 +179,6 @@ def main():
                                   key_name=key_name,
                                   addressing_type='public')
 
-                # marking which instance will be the NFS server
-                for inst in pub_res.instances:
-                    if inst.ami_launch_index == '0':
-                        # change the public ip of the server
-                        for a in connection.get_all_addresses():
-                            if a.public_ip == nfs_server_eip:
-                                connection.associate_address(inst.id, a.public_ip)
-                        inst.tags = {'server':True}
-                        server_inst = inst
-                        server_set = frozenset([server_inst])
-                    else:
-                        inst.tags = {'server':False}
-
                 instances = frozenset(pub_res.instances)
                 break
 
@@ -209,6 +196,29 @@ def main():
                     running_insts += 1
 
             time.sleep(15)
+
+        # mark which instance will be the NFS server
+        for inst in instances:
+            if inst.ami_launch_index == '0':
+                # change the public ip of the server
+                for a in connection.get_all_addresses():
+                    if a.public_ip == nfs_server_eip:
+                        inst.use_ip(a.public_ip)
+                        # should be:
+                        # while inst.ip_address != a.public_ip:
+                        # but eucalyptus doesn't properly fill the instance obj
+                        while inst.public_dns_name != a.public_ip:
+                            sys.stdout.write(".")
+                            sys.stdout.flush()
+
+                            inst.update()
+                            time.sleep(1)
+                inst.tags = {'server':True}
+                server_inst = inst
+                server_set = frozenset([server_inst])
+            else:
+                inst.tags = {'server':False}
+
 
         print
         print("Setting up instances. This will be another few minutes.")
