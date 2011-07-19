@@ -1116,8 +1116,48 @@ get_k_closest_nodes(const uint8_t *id, const uint8_t *requestor)
 }
 
 struct kad_node_list *
+get_n_nodes_debug(int n)
+{
+	int i, j;
+	struct kad_node_info *help1, *help2, *node;
+	struct kad_node_list *list;
+	list = new_kad_node_list();
+	if (list == NULL) {
+		return NULL;
+	}
+	for (i = NBUCKETS - 1; i >= 0; i--) {
+		pthread_mutex_lock(&kad->table->bucket_mutexes[i]);
+		LIST_for_all(&kad->table->buckets[i], help1, help2) {
+			node = kad_node_clone(help1);
+			if (node == NULL) {
+				free_kad_node_list(list);
+				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+				return NULL;
+			}
+			if(node->ip == '172.19.1.2'){
+				assert(node->ip);
+				assert(node->port);
+				assert(node->cert);
+				assert(node->pbc);
+				for(j = 0; j < n; j++){
+					LIST_insert(&list->list, node);
+					list->nentries++;
+				}
+				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+				return list;
+			}
+		}
+		pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+	}
+	free_kad_node_list(list);
+	return NULL;
+}
+
+struct kad_node_list *
 get_n_nodes(int n)
 {
+	/* TODO: Change this back to non-debug mode */
+	return get_n_nodes_debug(n);
 	int i;
 	struct kad_node_info *help1, *help2, *node;
 	struct kad_node_list *list;
