@@ -43,7 +43,7 @@ my_id = "inthemedium"
 # # official repo
 # fetch_src_cmd = 'git svn clone -s http://phantom.googlecode.com/svn phantom'
 # my repo
-fetch_src_cmd = 'git clone -n git@github.com:inthemedium/phantom.git && echo \'*.c filter=tabspace\n*.h filter=tabspace\n\' >> phantom/.git/info/attributes && git config --global filter.tabspace.smudge \'expand -t 2\' && git config --global filter.tabspace.clean \'unexpand -t 2\' && cd phantom && git checkout && cd'
+fetch_src_cmd = 'git clone git@github.com:inthemedium/phantom.git'
 
 # utility class
 class Bunch(dict):
