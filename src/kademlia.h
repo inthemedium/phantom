@@ -86,6 +86,7 @@ int start_kad(const struct config *config);
 void stop_kad(void);
 int kad_store(uint8_t *key, uint8_t *data, uint32_t len);
 int kad_find(const uint8_t *key, uint8_t **data, size_t *len);
+struct kad_node_list *get_n_nodes_debug(int n);
 struct kad_node_list *get_n_nodes(int n);
 void get_free_ap_adress(struct in6_addr *ap);
 

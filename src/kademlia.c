@@ -1134,7 +1134,7 @@ get_n_nodes_debug(int n)
 				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
 				return NULL;
 			}
-			if(node->ip == '172.19.1.2'){
+			if(strcmp(node->ip, "172.19.1.2") == 0){
 				assert(node->ip);
 				assert(node->port);
 				assert(node->cert);
@@ -1156,11 +1156,11 @@ get_n_nodes_debug(int n)
 struct kad_node_list *
 get_n_nodes(int n)
 {
-	/* TODO: Change this back to non-debug mode */
-	return get_n_nodes_debug(n);
 	int i;
 	struct kad_node_info *help1, *help2, *node;
 	struct kad_node_list *list;
+	/* TODO: Change this back to non-debug mode */
+	return get_n_nodes_debug(n);
 	list = new_kad_node_list();
 	if (list == NULL) {
 		return NULL;
