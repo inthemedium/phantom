@@ -1,6 +1,6 @@
 # this script restart all the phantom processes running in tmux
-command = ['tmux kill-window -t phantom:phantom',
-		   '! pgrep gdb$',
+command = ['! pgrep gdb$',
+		       'tmux kill-window -t phantom:phantom',
            'sudo ip address flush dev phantom',
            'tmux new-window -t phantom: -n phantom',
            'tmux clear-history -t phantom:phantom',
