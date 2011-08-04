@@ -277,10 +277,11 @@ get_nodes_from_db(struct node_info *nodes, int num)
 static void
 build_xy_path(struct setup_path *path)
 {
+	/* TODO: remove debugging stuff in this function */
 	int i, x, occurences, cnt, excessynodes, *indices;
 	excessynodes = path->nynodes - 2 * path->nxnodes;
 	indices = alloca(excessynodes * sizeof (int));
-	randomize_array(path->nodes, path->nnodes, sizeof (struct node_info));
+	/* randomize_array(path->nodes, path->nnodes, sizeof (struct node_info)); */
 	for (i = 0; i < excessynodes; i++) {
 		indices[i] = rand_range(0, path->nxnodes);
 	}
@@ -308,7 +309,7 @@ build_xy_path(struct setup_path *path)
 	}
 	assert(x == path->nxnodes && cnt == path->nnodes);
 	/* reverse whole path with a 50% chance */
-	path->is_reverse_path = rand_range(0, 2);
+	/* path->is_reverse_path = rand_range(0, 2); */
 	if (path->is_reverse_path) {
 		reverse_array(path->nodes, path->nnodes, sizeof (struct node_info));
 		for (i = 0; i < path->nnodes; i++) {

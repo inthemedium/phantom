@@ -1118,13 +1118,34 @@ get_k_closest_nodes(const uint8_t *id, const uint8_t *requestor)
 struct kad_node_list *
 get_n_nodes_debug(int n)
 {
-	int i, j;
-	struct kad_node_info *help1, *help2, *node;
+	int i;
+	struct kad_node_info *help1, *help2, *node, *tx_node;
 	struct kad_node_list *list;
 	list = new_kad_node_list();
 	if (list == NULL) {
 		return NULL;
 	}
+	for (i = NBUCKETS - 1; i >= 0; i--) {
+		pthread_mutex_lock(&kad->table->bucket_mutexes[i]);
+		LIST_for_all(&kad->table->buckets[i], help1, help2) {
+			tx_node = kad_node_clone(help1);
+			if (tx_node == NULL) {
+				free_kad_node_list(list);
+				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+				return NULL;
+			}
+			if(strcmp(tx_node->ip, "172.19.1.2") == 0){
+				assert(tx_node->ip);
+				assert(tx_node->port);
+				assert(tx_node->cert);
+				assert(tx_node->pbc);
+				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+				goto found;
+			}
+		}
+		pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
+	}
+found:
 	for (i = NBUCKETS - 1; i >= 0; i--) {
 		pthread_mutex_lock(&kad->table->bucket_mutexes[i]);
 		LIST_for_all(&kad->table->buckets[i], help1, help2) {
@@ -1134,18 +1155,26 @@ get_n_nodes_debug(int n)
 				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
 				return NULL;
 			}
-			if(strcmp(node->ip, "172.19.1.2") == 0){
-				assert(node->ip);
-				assert(node->port);
-				assert(node->cert);
-				assert(node->pbc);
-				for(j = 0; j < n; j++){
-					LIST_insert(&list->list, node);
-					list->nentries++;
-				}
+			if (list->nentries == 4) {
+				assert(tx_node->ip);
+				assert(tx_node->port);
+				assert(tx_node->cert);
+				assert(tx_node->pbc);
+				LIST_insert(&list->list, tx_node);
+				list->nentries++;
+            }
+			if(strcmp(node->ip, "172.19.1.2") != 0){
+              assert(node->ip);
+              assert(node->port);
+              assert(node->cert);
+              assert(node->pbc);
+              LIST_insert(&list->list, node);
+              list->nentries++;
+              if (list->nentries == n) {
 				pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
 				return list;
-			}
+              }
+            }
 		}
 		pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
 	}
