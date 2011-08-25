@@ -14,7 +14,9 @@
 #include <time.h>
 #include "config.h"
 #include "list.h"
-
+#define TMP_X_NUM 27                     /* smallest integer x that satisfies
+                                            2^160 < 62^x */
+#define TMP_X "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
 struct disk_record {
 	struct disk_record *prev;
 	struct disk_record *next;

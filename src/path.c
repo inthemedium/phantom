@@ -1978,7 +1978,9 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 	}
 	ret = send_x_package(path, config);
 	if (ret != 0) {
-		free_awaited_connection(wait);
+		if (path->is_reverse_path) {
+			free_awaited_connection(wait);
+		}
 		delete_struct_setup_path(path);
 		return NULL;
 	}
@@ -1986,12 +1988,19 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 	p = new_path();
 	if (p == NULL) {
 		delete_struct_setup_path(path);
-		free_awaited_connection(wait);
+		if (path->is_reverse_path) {
+			free_awaited_connection(wait);
+		}
 		return NULL;
 	}
 	if (want_entrypath) {
 		p->rte = malloc(sizeof (RoutingTableEntry));
 		if (p->rte == NULL) {
+			free_path(p);
+			delete_struct_setup_path(path);
+			if (path->is_reverse_path) {
+				free_awaited_connection(wait);
+			}
 			return NULL;
 		}
 		routing_table_entry__init(p->rte);
@@ -2006,7 +2015,9 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		if (p->rte->ip_adresses == NULL) {
 			free_path(p);
 			delete_struct_setup_path(path);
-			free_awaited_connection(wait);
+			if (path->is_reverse_path) {
+				free_awaited_connection(wait);
+			}
 			return NULL;
 		}
 		p->rte->ip_adresses[0] = path->entry_ip;
@@ -2016,7 +2027,9 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		if (p->rte->ports == NULL) {
 			free_path(p);
 			delete_struct_setup_path(path);
-			free_awaited_connection(wait);
+			if (path->is_reverse_path) {
+				free_awaited_connection(wait);
+			}
 			return NULL;
 		}
 		p->rte->ports[0] = path->entry_port;
@@ -2027,16 +2040,12 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		if (ret != 0) {
 			free_path(p);
 			delete_struct_setup_path(path);
-			free_awaited_connection(wait);
+			if (path->is_reverse_path) {
+				free_awaited_connection(wait);
+			}
 			return NULL;
 		}
 		update_netdb_publishing(p->rte);
-		if (ret != 0) {
-			free_path(p);
-			delete_struct_setup_path(path);
-			free_awaited_connection(wait);
-			return NULL;
-		}
 	}
 	p->ap = path->ap;
 	if (path->is_reverse_path) {

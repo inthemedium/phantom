@@ -809,13 +809,15 @@ house_keeping_worker(void)
 		}
 		/* XXX expire data */
 
-		/* republish routing table entry*/
-		if (t.tv_sec - kad->last_republication.tv_sec > KAD_T_REPUBLISH) {
-			kad->rte->version++;
-			ret = publish_routing_table_entry(kad->config, kad->rte);
-			if (ret != -1) {
-				ret = clock_gettime(CLOCK_REALTIME, &kad->last_republication);
-				assert(ret == 0);
+		if (kad->rte != NULL) {
+			/* republish routing table entry*/
+			if (t.tv_sec - kad->last_republication.tv_sec > KAD_T_REPUBLISH) {
+				kad->rte->version++;
+				ret = publish_routing_table_entry(kad->config, kad->rte);
+				if (ret != -1) {
+					ret = clock_gettime(CLOCK_REALTIME, &kad->last_republication);
+					assert(ret == 0);
+				}
 			}
 		}
 
@@ -986,6 +988,8 @@ start_kad(const struct config *config)
 
 	ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
 	assert(ret == 0);
+
+	kad->rte = NULL;
 
 	/* start the house_keeping thread after joining the network - so the
 	 * timevals will be initialized */
