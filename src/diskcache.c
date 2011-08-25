@@ -1,54 +1,5 @@
 #include "diskcache.h"
 
-static FILE *
-new_file(const struct disk_cache *d)
-{
-	int ret, fd;
-	char *buf;
-	FILE *file;
-
-	/* if (!secure_dir(d->dirname)) { */
-	/* 	printf("insecure directory choice!\n"); */
-	/* 	return NULL; */
-	/* } */
-
-	buf = malloc(d->len + 1 + TMP_X_NUM + 1); /* enough */
-	if (buf == NULL) {
-		return NULL;
-	}
-	ret = sprintf(buf, "%s/%s", d->dirname, TMP_X); /*XXX snprintf not in posix */
-	if (ret == -1) {
-		free(buf);
-		return NULL;
-	}
-	fd = mkstemp(buf);
-	if (fd == -1) {
-		free(buf);
-		return NULL;
-	}
-
-	/*
-	* Unlink immediately to hide the file name.
-	* The race condition here is inconsequential if the file
-	* is created with exclusive permissions (glibc >= 2.0.7)
-	*/
-
-	if (unlink(buf) == -1) {
-		free(buf);
-		return NULL;
-	}
-
-	free(buf);
-
-	file = fdopen(fd, "w+");
-	if (file == NULL) {
-		close(fd);
-		return NULL;
-	}
-
-	return file;
-}
-
 static struct disk_record *
 new_record(FILE *file, const uint8_t *key)
 {
@@ -117,7 +68,7 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 	if (len > INT_MAX) {
 		return -1;
 	}
-	file = new_file(d);
+	file = tmpfile();
 	if (file == NULL) {
 		return -1;
 	}
