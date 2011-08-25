@@ -5,6 +5,7 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <inttypes.h>
 #include <openssl/evp.h>
 #include <assert.h>
@@ -14,12 +15,14 @@
 #include "config.h"
 #include "list.h"
 
+#define TMP_X_NUM 27                     /* smallest integer x that satisfies
+                                            2^160 < 62^x */
+#define TMP_X "XXXXXXXXXXXXXXXXX"
 struct disk_record {
 	struct disk_record *prev;
 	struct disk_record *next;
 	uint8_t key[SHA_DIGEST_LENGTH];
-	char *name;
-	int len;
+	FILE *file;
 	struct timespec time;
 };
 

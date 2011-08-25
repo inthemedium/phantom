@@ -1,30 +1,56 @@
 #include "diskcache.h"
 
-static char *
-filename(const struct disk_cache *d, const uint8_t *key)
+static FILE *
+new_file(const struct disk_cache *d)
 {
-	int ret;
-	char *name, *buf;
-	name = bin_to_hex(key, SHA_DIGEST_LENGTH);
-	if (name == NULL) {
-		return NULL;
-	}
-	buf = malloc(d->len + 2 * SHA_DIGEST_LENGTH + 10); /* enough */
+	int ret, fd;
+	char *buf;
+	FILE *file;
+
+	/* if (!secure_dir(d->dirname)) { */
+	/* 	printf("insecure directory choice!\n"); */
+	/* 	return NULL; */
+	/* } */
+
+	buf = malloc(d->len + 1 + TMP_X_NUM + 1); /* enough */
 	if (buf == NULL) {
-		free(name);
 		return NULL;
 	}
-	ret = sprintf(buf, "%s/%s", d->dirname, name); /*XXX snprintf not in posix */
-	free(name);
+	ret = sprintf(buf, "%s/%s", d->dirname, TMP_X); /*XXX snprintf not in posix */
 	if (ret == -1) {
 		free(buf);
 		return NULL;
 	}
-	return buf;
+	fd = mkstemp(buf);
+	if (fd == -1) {
+		free(buf);
+		return NULL;
+	}
+
+	/*
+	* Unlink immediately to hide the file name.
+	* The race condition here is inconsequential if the file
+	* is created with exclusive permissions (glibc >= 2.0.7)
+	*/
+
+	if (unlink(buf) == -1) {
+		free(buf);
+		return NULL;
+	}
+
+	free(buf);
+
+	file = fdopen(fd, "w+");
+	if (file == NULL) {
+		close(fd);
+		return NULL;
+	}
+
+	return file;
 }
 
 static struct disk_record *
-new_record(char *file)
+new_record(FILE *file, const uint8_t *key)
 {
 	struct disk_record *out;
 	assert(file);
@@ -32,17 +58,15 @@ new_record(char *file)
 	if (out == NULL) {
 		return NULL;
 	}
-	out->name = file;
-	out->len = strlen(file);
+	out->file = file;
+	memcpy(out->key, key, SHA_DIGEST_LENGTH);
 	return out;
 }
 
 static void
 free_record(struct disk_record *r)
 {
-	unlink(r->name);
-	free(r->name);
-	free(r);
+	fclose(r->file);
 }
 
 struct disk_cache *
@@ -82,10 +106,10 @@ free_disk_cache(struct disk_cache *d)
 int
 disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, uint32_t len)
 {
-	int ret, fd;
-	char *name;
+	int ret;
+	FILE *file;
 	uint32_t have;
-	struct disk_record *r, *help1, *help2;
+	struct disk_record *r;
 	assert(d);
 	assert(key);
 	assert(data);
@@ -93,49 +117,29 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 	if (len > INT_MAX) {
 		return -1;
 	}
-	name = filename(d, key);
-	if (name == NULL) {
+	file = new_file(d);
+	if (file == NULL) {
 		return -1;
 	}
 	pthread_mutex_lock(&d->lock);
-	if (access(name, R_OK | W_OK) == 0) {
-		int slen = strlen(name);
-		/* do not store if file already exists in disk_cache */
-		LIST_for_all(&d->files, help1, help2) {
-			if (slen == help1->len && ! memcmp(help1->name, name, slen)) {
-				assert(! clock_gettime(CLOCK_REALTIME, &help1->time));
-				pthread_mutex_unlock(&d->lock);
-				free(name);
-				return 0;
-			}
-		}
-		assert(0);
-	}
-	r = new_record(name);
-	memcpy(r->key, key, SHA_DIGEST_LENGTH);
+	r = new_record(file, key);
 	if (r == NULL) {
-		free(name);
-		return -1;
-	}
-	fd = creat(name, S_IRUSR | S_IWUSR);
-	if (fd == -1) {
-		free_record(r);
+		fclose(file);
 		pthread_mutex_unlock(&d->lock);
 		return -1;
 	}
+
 	have = 0;
 	while (have < len) {
-		ret = write(fd, data + have, len - have);
-		if (ret == -1) {
+		ret = fwrite(data + have, len - have, 1, file);
+		if (ret == 0) {
 			free_record(r);
 			pthread_mutex_unlock(&d->lock);
-			close(fd);
 			return -1;
 		}
-		have += ret;
+		have += ret * len;
 	}
 	assert(have == len);
-	close(fd);
 	assert(! clock_gettime(CLOCK_REALTIME, &r->time));
 	LIST_insert(&d->files, r);
 	pthread_mutex_unlock(&d->lock);
@@ -145,54 +149,51 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 uint8_t *
 disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 {
-	char *name;
 	uint8_t *out;
-	int fd, ret;
-	uint32_t want, have;
-	struct stat s;
+	int ret;
+	size_t want, have;
+	struct disk_record *help1, *help2;
+	FILE *file = NULL;
 	assert(d);
 	assert(key);
 	assert(outsize);
 
-	/* get full path to key on FS */
-	name = filename(d, key);
-	if (name == NULL) {
-		return NULL;
-	}
-	bzero(&s, sizeof (struct stat));
 	pthread_mutex_lock(&d->lock);
-	ret = stat(name, &s);
-	if (ret == -1) {
+
+	LIST_for_all(&d->files, help1, help2) {
+		if (!memcmp(help1->key, key, SHA_DIGEST_LENGTH)) {
+			file = help1->file;
+			break;
+		}
+	}
+
+	/* key is not among records */
+	if (file == NULL) {
 		pthread_mutex_unlock(&d->lock);
-		free(name);
 		return NULL;
 	}
-	fd = open(name, O_RDONLY);
-	free(name);
-	if (fd == -1) {
-		pthread_mutex_unlock(&d->lock);
-		return NULL;
-	}
-	want = s.st_size;
+
+    fseek(file, 0L, SEEK_END);
+	want = ftell(file);
+	rewind(file);
 	out = malloc(want);
 	if (out == NULL) {
-		close(fd);
 		pthread_mutex_unlock(&d->lock);
 		return NULL;
 	}
 	have = 0;
 	while (have < want) {
-		ret = read(fd, out + have, want - have);
-		if (ret == -1) {
-			close(fd);
-			free(out);
-			pthread_mutex_unlock(&d->lock);
-			return NULL;
+		ret = fread(out + have, want - have, 1, file);
+		if (ret == 0) {
+			if (! feof(file)) {
+				free(out);
+				pthread_mutex_unlock(&d->lock);
+				return NULL;
+			}
 		}
-		have += ret;
+		have += want * ret;
 	}
 	assert(have == want);
-	close(fd);
 	pthread_mutex_unlock(&d->lock);
 	*outsize = have;
 	return out;
