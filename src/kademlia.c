@@ -475,6 +475,7 @@ update_lists(struct kad_node_list *polled, struct kad_node_list *unpolled, struc
 	if (pwd->ret == NULL) {
 		/* node failed to reply */
 		LIST_insert(failed, pwd->n);
+		/* remove all the failed nodes from unpolled list */
 		LIST_for_all(failed, help1, help2) {
 			LIST_for_all(&unpolled->list, help3, help4) {
 				if (! memcmp(help1->id, help3->id, SHA_DIGEST_LENGTH)) {
@@ -489,6 +490,7 @@ update_lists(struct kad_node_list *polled, struct kad_node_list *unpolled, struc
 	}
 	LIST_insert(&polled->list, pwd->n);
 	polled->nentries++;
+	/* remove all the polled nodes from unpolled list */
 	LIST_for_all(&polled->list, help1, help2) {
 		LIST_for_all(&unpolled->list, help3, help4) {
 			if (! memcmp(help1->id, help3->id, SHA_DIGEST_LENGTH)) {
@@ -499,12 +501,14 @@ update_lists(struct kad_node_list *polled, struct kad_node_list *unpolled, struc
 			}
 		}
 	}
-	/* skip copies of our own node or already polled/failed nodes and do not add nodes to unpolled twice */
+	/* add new node information to the unpolled list */
 	for (i = 0; i < pwd->ret->nnodes; i++) {
 		skip = 0;
+		/* skip our own node */
 		if (! memcmp(pwd->ret->nodes[i]->id, kad->own_id, SHA_DIGEST_LENGTH)) {
 			skip = 1;
 		} else {
+			/* skip nodes known to be failed */
 			LIST_for_all(failed, help1, help2) {
 				if (! memcmp(help1->id, pwd->ret->nodes[i]->id, SHA_DIGEST_LENGTH)) {
 					skip = 1;
@@ -512,6 +516,7 @@ update_lists(struct kad_node_list *polled, struct kad_node_list *unpolled, struc
 				}
 			}
 			if (! skip) {
+				/* skip nodes already polled */
 				LIST_for_all(&polled->list, help1, help2) {
 					if (! memcmp(help1->id, pwd->ret->nodes[i]->id, SHA_DIGEST_LENGTH)) {
 						skip = 1;
@@ -520,6 +525,7 @@ update_lists(struct kad_node_list *polled, struct kad_node_list *unpolled, struc
 				}
 			}
 			if (!skip) {
+				/* skip nodes already in the unpolled list */
 				LIST_for_all(&unpolled->list, help1, help2) {
 					if (! memcmp(help1->id, pwd->ret->nodes[i]->id, SHA_DIGEST_LENGTH)) {
 						skip = 1;
@@ -720,12 +726,34 @@ iterative_find(const uint8_t *id, uint8_t **data, size_t *len, int wantvalue)
 				}
 			}
 			update_lists(polled, unpolled, &failed, &pwds[i]);
+
+			/* remove nodes that returned a value from the polled list
+               note that multiple nodes may return the value */
+			if (wantvalue && pwds[i].ret && pwds[i].ret->success) {
+				LIST_remove(pwds[i].n);
+				polled->nentries--;
+			}
 			if (pwds[i].ret != NULL) {
 				free_rpc_return(pwds[i].ret);
 			}
 		}
 		if (got_it) {
-			/* XXX post datum to nearest node who did not return it */
+			if (polled->nentries > 0) {
+				sort_list_by_closeness(id, polled);
+			}
+			/* store value at the closest node that didn't return a value */
+			LIST_for_all(&polled->list, help1, help2) {
+				if (polled->nentries > 0) {
+					LIST_remove(help1);
+					assert(help1);
+					polled->nentries--;
+					ret = rpc_store(id, *data, *len, help1, kad->config->communication_certificate, kad->config->private_communication_key, &kad->self);
+					if (ret == -1) {
+					  continue;
+					}
+				}
+				break;
+			}
 			free_kad_node_list(unpolled);
 			free_kad_node_list(polled);
 			LIST_for_all(&failed, help1, help2) {
@@ -767,6 +795,8 @@ house_keeping_worker(void)
 		}
 		ret = clock_gettime(CLOCK_REALTIME, &t);
 		assert(ret == 0);
+
+		/* ensure all the buckets are fresh */
 		for (i = 1; i < NBUCKETS; i++) {
 			if (t.tv_sec - kad->table->last_action[i].tv_sec > KAD_T_REFRESH) {
 				random_id_for_bucket(i, id);
@@ -777,7 +807,38 @@ house_keeping_worker(void)
 				}
 			}
 		}
-		/* XXX republish data replicate data expire data */
+		/* XXX expire data */
+
+		/* republish routing table entry*/
+		if (t.tv_sec - kad->last_republication.tv_sec > KAD_T_REPUBLISH) {
+			kad->rte->version++;
+			ret = publish_routing_table_entry(kad->config, kad->rte);
+			if (ret != -1) {
+				ret = clock_gettime(CLOCK_REALTIME, &kad->last_republication);
+				assert(ret == 0);
+			}
+		}
+
+		/* replicate all data stored in disk cache regularly */
+		if (t.tv_sec - kad->last_replication.tv_sec > KAD_T_REPLICATE) {
+				size_t len;
+				struct disk_record *help1, *help2;
+				uint8_t *data;
+
+				LIST_for_all(&kad->cache->files, help1, help2) {
+					data = disk_cache_find(kad->cache, help1->key, &len);
+					if (data == NULL) {
+						continue;
+					}
+					ret = kad_store(help1->key, data, len);
+					if (ret == -1) {
+						continue;
+					}
+					free(data);
+				}
+				ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
+				assert(ret == 0);
+		}
 	}
 }
 
@@ -922,6 +983,10 @@ start_kad(const struct config *config)
 
 	}
 	cleanup_stack_push(free, kad->nodefile);
+
+	ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
+	assert(ret == 0);
+
 	/* start the house_keeping thread after joining the network - so the
 	 * timevals will be initialized */
 	ret = pthread_create(&thread->thread, NULL, (void *(*)(void *)) house_keeping_worker, NULL);
@@ -1145,6 +1210,8 @@ get_n_nodes_debug(int n)
 		}
 		pthread_mutex_unlock(&kad->table->bucket_mutexes[i]);
 	}
+	free_kad_node_list(list);
+	return NULL;
 found:
 	for (i = NBUCKETS - 1; i >= 0; i--) {
 		pthread_mutex_lock(&kad->table->bucket_mutexes[i]);
@@ -1235,16 +1302,18 @@ int kad_find(const uint8_t *key, uint8_t **data, size_t *len)
 		}
 	} else {
 		assert(*data == NULL);
+		/* we don't need to know about the closest nodes to the value */
 		free_kad_node_list(list);
 	}
 	return -1;
 }
 
 void
-get_free_ap_adress(struct in6_addr *ap)
+update_kad_publishing(RoutingTableEntry *rte)
 {
-	static uint8_t ap_prefix[] = AP_PREFIX;
-	assert(sizeof (ap_prefix) < sizeof (ap->s6_addr));
-	memcpy(ap->s6_addr, ap_prefix, sizeof (ap_prefix));
-	rand_bytes(ap->s6_addr + sizeof (ap_prefix), sizeof (ap->s6_addr) - sizeof (ap_prefix));
+	int ret;
+
+	kad->rte = rte;
+	ret = clock_gettime(CLOCK_REALTIME, &kad->last_republication);
+	assert(ret == 0);
 }

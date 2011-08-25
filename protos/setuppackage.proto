@@ -8,7 +8,19 @@ message routing_table_entry {
 	required bytes ap_adress = 1;
 	repeated string ip_adresses = 2;
 	repeated fixed32 ports = 3;
-};
+	required uint32 version = 4; /* note that a value of 0 is reservered */
+}
+
+/* wrapper to make the signature process simpler */
+message signed_routing_table_entry {
+	required bytes packed_routing_table_entry = 1;
+	required bytes routing_certificate_flat = 2;
+	required bytes signature = 3;
+}
+message anonymized_rpc {
+	required bytes data = 1;
+	required uint32 type = 2;
+}
 
 message setup_package {
 	required string prev_ip = 1;
@@ -29,7 +41,7 @@ message setup_package {
 	required bytes hash = 16;
 	required bytes external_hash = 17;
 	optional bytes ap_adress = 18;
-	optional routing_table_entry rte = 19;
+	optional anonymized_rpc rpc = 19;
 }
 
 message setup_array {

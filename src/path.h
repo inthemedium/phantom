@@ -71,12 +71,13 @@ struct setup_path {
 	struct ssl_connection *ssl_conn;
 	/* is_reverse_path == 1 if we start with many y nodes */
 	int is_reverse_path;
-	int reserve_ap_adress;
 	char *entry_ip;
+	uint16_t entry_port;
 	struct in6_addr ap;
 	RSA *construction_certificate;
 	const X509 *routing_certificate;
 	struct X509_flat *routing_certificate_flat;
+	AnonymizedRpc *anonymized_rpc;
 };
 
 struct path {
@@ -88,11 +89,12 @@ struct path {
 	uint8_t peer_id[SHA_DIGEST_LENGTH];
 	char *peer_ip;
 	uint16_t peer_port;
+	RoutingTableEntry *rte;
 };
 
 struct path *construct_entry_path(const struct config *config);
 struct path *construct_exit_path(const struct config *config);
-struct path *construct_reserve_ap_path(const struct config *config);
+struct path *construct_reserve_ap_path(const struct config *config, AnonymizedRpc *rpc);
 void free_path(struct path *path);
 uint8_t *handle_first_round_setup_array(const struct config *config, const uint8_t *sa, int sa_len, const uint8_t *id, const char *from_ip, struct conn_ctx *conn, uint32_t *outsize);
 uint8_t *handle_second_round_setup_array(const struct config *config, const uint8_t *sa, int sa_len, const uint8_t *id, const struct conn_ctx *oldconn, struct conn_ctx *conn, uint32_t *outsize);

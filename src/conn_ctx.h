@@ -13,7 +13,7 @@ struct xkeys {
 	uint8_t *ivs;
 };
 
-struct rte {
+struct rpc {
 	uint32_t len;
 	uint8_t *data;
 };
@@ -38,7 +38,7 @@ struct conn_ctx {
 	RSA *construction_certificate;
 	/* optional */
 	struct in6_addr ap;
-	struct rte rte;
+	struct rpc rpc;
 };
 
 struct conn_ctx *new_conn_ctx(void);

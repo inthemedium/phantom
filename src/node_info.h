@@ -23,6 +23,6 @@ struct node_info {
 #define T_NODE (0x04)
 #define ENTRY_NODE (0x08)
 #define SUCCESS_FLAG (0x10)
-#define RESERVE_AP (0x20)
+#define ANONYMIZED_RPC (0x20)
 
 #endif

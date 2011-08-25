@@ -30,6 +30,14 @@
 #include <linux/if_tun.h>
 #include <stdint.h>
 
+#define RSA_KEY_LEN 2048
+#define RSA_SIGN_LEN (RSA_KEY_LEN / 8)
+
+struct packed_msg {
+	uint8_t *data;
+	size_t len;
+};
+
 struct ssl_connection {
 	SSL *ssl;
 	int socket;
@@ -60,6 +68,9 @@ char *strdup(const char *s);
 uint8_t *read_package(SSL *ssl, uint32_t *outsize);
 int write_package(SSL *ssl, uint8_t *data, uint32_t len);
 /*int get_phantom_v6_addr(struct in6_addr *res);*/
+int check_signed_data(const uint8_t *sig, uint32_t siglen, const uint8_t *data, uint32_t len, EVP_PKEY *key);
+int sign_data(uint8_t *sig, const uint8_t *data, uint32_t len, EVP_PKEY *key);
+void packed_msg_free(struct packed_msg *m);
 
 #if !defined(SIZE_MAX)
 #define SIZE_MAX (~((size_t)0))

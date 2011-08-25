@@ -17,6 +17,7 @@
 struct disk_record {
 	struct disk_record *prev;
 	struct disk_record *next;
+	uint8_t key[SHA_DIGEST_LENGTH];
 	char *name;
 	int len;
 	struct timespec time;

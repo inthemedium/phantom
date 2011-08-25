@@ -381,7 +381,7 @@ prepare_exit_worker(struct tunnel_dummy_package *dp, const struct conn_ctx *conn
 		free(ew);
 		return NULL;
 	}
-	ew->reserve_ap = (conn->flags & RESERVE_AP)? 1 : 0;
+	ew->anonymized_rpc = (conn->flags & ANONYMIZED_RPC)? 1 : 0;
 	ew->dp = dp;
 	ew->conn = conn;
 	ew->peer = peer;
@@ -397,9 +397,56 @@ free_exit_worker(struct exit_worker *ew)
 }
 
 static int
+write_pkg_over_tunnel(struct ssl_connection *tunnel_conn,
+						struct exit_worker *ew,
+						uint8_t *pkg,
+						size_t pkg_len)
+{
+	int ret, writ;
+	EVP_CIPHER_CTX dctx;
+	uint8_t *obuf;
+	uint32_t conv_pkg_len;
+	uint8_t init_reply_package[TUNNEL_BLOCK_SIZE], ser_pkg_len[sizeof(conv_pkg_len)];
+
+	/* catch overflows */
+	if (pkg_len > UINT32_MAX) {
+		return -1;
+	}
+	conv_pkg_len = pkg_len;
+	serialize_32_t(conv_pkg_len, ser_pkg_len);
+	rand_bytes(init_reply_package, TUNNEL_BLOCK_SIZE);
+	ret = ssl_write(tunnel_conn->ssl, init_reply_package, TUNNEL_BLOCK_SIZE);
+	if (ret != 0) {
+		return -1;
+	}
+
+	obuf = malloc((pkg_len > sizeof(conv_pkg_len)) ?
+                  pkg_len : sizeof(conv_pkg_len) +
+                  EVP_CIPHER_CTX_block_size(&dctx) + 1);
+	if (obuf == NULL) {
+		return -1;
+	}
+	/* write the size on the package on the wire first */
+	EVP_CIPHER_CTX_init(&dctx);
+	EVP_DecryptInit(&dctx, EVP_aes_256_ofb(), ew->dp->key, ew->dp->iv);
+	EVP_DecryptUpdate(&dctx, obuf, &writ, ser_pkg_len, sizeof(conv_pkg_len));
+	ret = ssl_write(tunnel_conn->ssl, obuf, sizeof(conv_pkg_len));
+
+    /* write the package on the wire */
+	EVP_DecryptUpdate(&dctx, obuf, &writ, pkg, conv_pkg_len);
+	EVP_DecryptFinal(&dctx, obuf + writ, &writ);
+	EVP_CIPHER_CTX_cleanup(&dctx);
+	ret = ssl_write(tunnel_conn->ssl, obuf, conv_pkg_len);
+
+	free(obuf);
+	return (ret != 0)? -1 : 0;
+}
+
+static int
 exit_worker(struct exit_worker *ew)
 {
-	int ret, written, written2;
+	int written, written2;
+	size_t ret;
 	socklen_t peer_len;
 	char *ip;
 	uint8_t buf[4];
@@ -480,31 +527,81 @@ exit_worker(struct exit_worker *ew)
 		free_exit_worker(ew);
 		return -1;
 	}
-	if (ew->reserve_ap) {
-		struct in6_addr rap;
-		uint8_t obuf[16];
-		int writ;
-		EVP_CIPHER_CTX dctx;
-		assert(sizeof (rap.s6_addr) == 16);
-		get_free_ap_adress(&rap);
-		rand_bytes(init_reply_package, TUNNEL_BLOCK_SIZE);
-		ret = ssl_write(tunnel_conn->ssl, init_reply_package, TUNNEL_BLOCK_SIZE);
-		if (ret != 0) {
-			free_ssl_connection(tunnel_conn);
-			free_exit_worker(ew);
-			return -1;
+	if (ew->anonymized_rpc) {
+		AnonymizedRpc *rpc;
+		uint8_t *packed_reply;
+		size_t len;
+
+		rpc = anonymized_rpc__unpack(NULL, ew->conn->rpc.len, ew->conn->rpc.data);
+		if (rpc->type == ANONYMOUS_FIND) {
+			FindValueReply reply;
+			uint8_t *data;
+			assert(rpc->data.len == SHA_DIGEST_LENGTH);
+			ret = kad_find(rpc->data.data, &data, &len);
+			anonymized_rpc__free_unpacked(rpc, NULL);
+			find_value_reply__init(&reply);
+			reply.success = (ret == 0)? 1 : 0;
+			if (reply.success) {
+				reply.data.len = len;
+				reply.data.data = data;
+			}
+			len = find_value_reply__get_packed_size(&reply);
+			packed_reply = malloc(len);
+			if (packed_reply == NULL) {
+				if (data != NULL) {
+					free(data);
+				}
+				free_ssl_connection(tunnel_conn);
+				free_exit_worker(ew);
+				return -1;
+			}
+			ret = find_value_reply__pack(&reply, packed_reply);
+			assert(ret == len);
+			if (data != NULL) {
+				free(data);
+			}
+		} else if (rpc->type == ANONYMOUS_STORE) {
+			StoreReply reply;
+			SignedRoutingTableEntry *srte;
+			RoutingTableEntry *rte;
+			uint8_t hash[SHA_DIGEST_LENGTH];
+
+			srte = signed_routing_table_entry__unpack(NULL,
+                                                      rpc->data.len,
+                                                      rpc->data.data);
+			ret = validate_signed_routing_table_entry(srte);
+			if (ret != 0) {
+				free_ssl_connection(tunnel_conn);
+				free_exit_worker(ew);
+				return -1;
+            }
+
+			rte = routing_table_entry__unpack(NULL,
+                                              srte->packed_routing_table_entry.len,
+                                              srte->packed_routing_table_entry.data);
+			signed_routing_table_entry__free_unpacked(srte, NULL);
+
+			SHA1(rte->ap_adress.data, rte->ap_adress.len, hash);
+			routing_table_entry__free_unpacked(rte, NULL);
+
+			ret = kad_store(hash, rpc->data.data, rpc->data.len);
+			anonymized_rpc__free_unpacked(rpc, NULL);
+
+			store_reply__init(&reply);
+			reply.success = (ret == 0)? 1 : 0;
+			len = store_reply__get_packed_size(&reply);
+			packed_reply = malloc(len);
+			if (packed_reply == NULL) {
+				free_ssl_connection(tunnel_conn);
+				free_exit_worker(ew);
+				return -1;
+			}
+			ret = store_reply__pack(&reply, packed_reply);
+			assert(ret == len);
 		}
-		EVP_CIPHER_CTX_init(&dctx);
-		EVP_DecryptInit(&dctx, EVP_aes_256_ofb(), ew->dp->key, ew->dp->iv);
-		EVP_DecryptUpdate(&dctx, obuf, &writ, rap.s6_addr, sizeof (rap.s6_addr));
-		EVP_DecryptFinal(&dctx, obuf + writ, &writ);
-		EVP_CIPHER_CTX_cleanup(&dctx);
-		ret = ssl_write(tunnel_conn->ssl, obuf, sizeof (rap.s6_addr));
-		if (ret != 0) {
-			free_ssl_connection(tunnel_conn);
-			free_exit_worker(ew);
-			return -1;
-		}
+
+		ret = write_pkg_over_tunnel(tunnel_conn, ew, packed_reply, len);
+		free(packed_reply);
 		free_ssl_connection(tunnel_conn);
 		free_exit_worker(ew);
 		return (ret != 0)? -1 : 0;
@@ -515,7 +612,7 @@ exit_worker(struct exit_worker *ew)
 		goto out;
 	} /* external conn succeeded*/
 	printf("external conn succeeded\n");
-	/* inform anonoymized node about successful creation of connection via random data */
+	/* inform anonymized node about successful creation of connection via random data */
 	rand_bytes(init_reply_package, TUNNEL_BLOCK_SIZE);
 	ret = ssl_write(tunnel_conn->ssl, init_reply_package, TUNNEL_BLOCK_SIZE);
 	if (ret != 0) {
@@ -642,10 +739,10 @@ become_tx_node(const struct ssl_connection *peer, struct conn_ctx *conn)
 	if (conn->flags & ENTRY_NODE) {
 		uint8_t hash[SHA_DIGEST_LENGTH];
 		/* FIXME */
-		ret = update_routing_table_entry(&conn->ap, &conn->rte, server.port, NULL /**routing_certificate*/);
-		if (ret != 0) {
-			return -1;
-		}
+		/* ret = update_routing_table_entry(&conn->ap, &conn->rte, server.port, NULL /\**routing_certificate*\/); */
+		/* if (ret != 0) { */
+		/* 	return -1; */
+		/* } */
 		SHA1(conn->ap.s6_addr, sizeof (conn->ap.s6_addr), hash);
 		aw = register_wait_connection_permanent(NULL, hash);
 		if (aw == NULL) {
@@ -727,7 +824,7 @@ become_tx_node(const struct ssl_connection *peer, struct conn_ctx *conn)
 				free_exit_worker(ew);
 				return -1;
 			}
-			if (ew->reserve_ap) {
+			if (ew->anonymized_rpc) {
 				return exit_worker(ew);
 			}
 			pthread_mutex_lock(&server.worker_pid_mutex);

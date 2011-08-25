@@ -39,8 +39,8 @@ free_conn_ctx(struct conn_ctx *conn)
 	if (conn->to_next != NULL) {
 		free_ssl_connection(conn->to_next);
 	}
-	if (conn->rte.data != NULL) {
-		free(conn->rte.data);
+	if (conn->rpc.data != NULL) {
+		free(conn->rpc.data);
 	}
 	free(conn);
 }

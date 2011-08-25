@@ -1,35 +1,41 @@
 #include "path.h"
 #include "server.h"
 
+/* static int */
+/* add_routing_table_entry(SetupPackage *s, struct in6_addr *ap_adress, char *const *ips, int nips) */
+/* { */
+/* 	int i; */
+/* 	s->rte = malloc(sizeof (RoutingTableEntry)); */
+/* 	if (s->rte == NULL) { */
+/* 		return -1; */
+/* 	} */
+/* 	routing_table_entry__init(s->rte); */
+/* 	s->rte->ap_adress.data = ap_adress->s6_addr; */
+/* 	assert(sizeof (ap_adress->s6_addr) == 16); */
+/* 	s->rte->ap_adress.len = sizeof (ap_adress->s6_addr); */
+/* 	s->rte->n_ip_adresses = nips; */
+/* 	s->rte->ip_adresses = malloc (nips * sizeof (char *)); */
+/* 	if (s->rte->ip_adresses == NULL) { */
+/* 		free(s->rte); */
+/* 		return -1; */
+/* 	} */
+/* 	if (s->rte->ip_adresses == NULL) { */
+/* 		free(s->rte->ip_adresses); */
+/* 		free(s->rte); */
+/* 		return -1; */
+/* 	} */
+/* 	for (i = 0; i < nips; i++) { */
+/* 		s->rte->ip_adresses[i] = ips[i]; */
+/* 	} */
+/* 	return 0; */
+/* } */
+
 static int
-add_routing_table_entry(SetupPackage *s, struct in6_addr *ap_adress, char *const *ips, int nips)
+add_anonymized_rpc(SetupPackage *sp, AnonymizedRpc * rpc)
 {
-	int i;
-	s->rte = malloc(sizeof (RoutingTableEntry));
-	if (s->rte == NULL) {
-		return -1;
-	}
-	routing_table_entry__init(s->rte);
-	s->rte->ap_adress.data = ap_adress->s6_addr;
-	assert(sizeof (ap_adress->s6_addr) == 16);
-	s->rte->ap_adress.len = sizeof (ap_adress->s6_addr);
-	s->rte->n_ip_adresses = nips;
-	s->rte->ip_adresses = malloc (nips * sizeof (char *));
-	if (s->rte->ip_adresses == NULL) {
-		free(s->rte);
-		return -1;
-	}
-	if (s->rte->ip_adresses == NULL) {
-		free(s->rte->ip_adresses);
-		free(s->rte);
-		return -1;
-	}
-	for (i = 0; i < nips; i++) {
-		s->rte->ip_adresses[i] = ips[i];
-	}
+	sp->rpc = rpc;
 	return 0;
 }
-
 static void
 pad_key(const uint8_t *key, int len, uint8_t *out, int wantlen)
 {
@@ -130,6 +136,7 @@ static void
 delete_struct_setup_path2(struct setup_path *path, int save_conn)
 {
 	int i;
+
 	if (path->nodes != NULL) {
 		delete_nodes(path->nodes, path->nnodes);
 	}
@@ -171,7 +178,7 @@ delete_struct_setup_path(struct setup_path *path)
 }
 
 static struct setup_path *
-create_struct_setup_path(const struct config *config, int want_entrypath, int reserve_ap)
+create_struct_setup_path(const struct config *config, int want_entrypath, AnonymizedRpc *rpc)
 {
 	int i, j, ret;
 	struct setup_path *p = calloc(1, sizeof (struct setup_path));
@@ -179,22 +186,26 @@ create_struct_setup_path(const struct config *config, int want_entrypath, int re
 		free(p);
 		return NULL;
 	}
-	p->reserve_ap_adress = reserve_ap;
+
+	p->anonymized_rpc = rpc;
 	p->nxnodes = config->nxnodes;
 	p->nynodes = config->nynodes;
-	p->nnodes = config->nynodes + config->nxnodes;
+	/* this should reflect the number of allocated nodes */
+	p->nnodes = 0;
 	p->entrypath = want_entrypath;
-	if (! reserve_ap) {
-		p->routing_certificate = config->routing_certificate;
-		p->routing_certificate_flat = config->routing_certificate_flat;
+	p->routing_certificate = config->routing_certificate;
+	p->routing_certificate_flat = config->routing_certificate_flat;
+	if (!rpc) {
 		bzero(p->ap.s6_addr, 16);
 		ret = reserve_new_ap_adress(config, &p->ap);
 		if (ret != 0) {
-			free(p);
+			delete_struct_setup_path(p);
 			return NULL;
 		}
 	}
-	p->nodes = calloc(p->nnodes, sizeof (struct node_info));
+	p->nodes = calloc(config->nynodes + config->nxnodes,
+                      sizeof (struct node_info));
+	p->nnodes = config->nynodes + config->nxnodes;
 	if (p->nodes == NULL) {
 		delete_struct_setup_path(p);
 		return NULL;
@@ -317,9 +328,10 @@ build_xy_path(struct setup_path *path)
 				path->nodes[i].flags |= T_NODE;
 				if (path->entrypath) {
 					path->entry_ip = path->nodes[i].ip;
+					path->entry_port = path->nodes[i].port;
 					path->nodes[i].flags |= ENTRY_NODE;
-				} else if (path->reserve_ap_adress) {
-					path->nodes[i].flags |= RESERVE_AP;
+				} else if (path->anonymized_rpc) {
+					path->nodes[i].flags |= ANONYMIZED_RPC;
 				}
 				break;
 			}
@@ -331,8 +343,9 @@ build_xy_path(struct setup_path *path)
 				if (path->entrypath) {
 					path->nodes[path-> nnodes - 1 - i].flags |= ENTRY_NODE;
 					path->entry_ip = path->nodes[path->nnodes - 1 - i].ip;
-				} else if (path->reserve_ap_adress) {
-					path->nodes[path-> nnodes - 1 - i].flags |= RESERVE_AP;
+					path->entry_port = path->nodes[path->nnodes - 1 - i].port;
+				} else if (path->anonymized_rpc) {
+					path->nodes[path-> nnodes - 1 - i].flags |= ANONYMIZED_RPC;
 				}
 				break;
 			}
@@ -563,48 +576,6 @@ encrypt_symmetric(const uint8_t *serialized, uint32_t len, const uint8_t *key, i
 	return out;
 }
 
-static int
-sign_data(uint8_t *sig, const uint8_t *data, uint32_t len, EVP_PKEY *key)
-{
-	int ret;
-	uint32_t written;
-	EVP_MD_CTX ctx;
-	const EVP_MD *type = EVP_sha1();
-	EVP_MD_CTX_init(&ctx);
-	EVP_SignInit(&ctx, type);
-	ret = EVP_SignUpdate(&ctx, data, len);
-	if (ret != 1) {
-		return -1;
-	}
-	ret = EVP_SignFinal(&ctx, sig, &written, key);
-	if (ret != 1) {
-		return -1;
-	}
-	EVP_MD_CTX_cleanup(&ctx);
-	assert(written == RSA_SIGN_LEN);
-	return 0;
-}
-
-static int
-check_signed_data(const uint8_t *sig, uint32_t siglen, const uint8_t *data, uint32_t len, EVP_PKEY *key)
-{
-	int ret;
-	EVP_MD_CTX ctx;
-	const EVP_MD *type = EVP_sha1();
-	EVP_MD_CTX_init(&ctx);
-	EVP_VerifyInit(&ctx, type);
-	ret = EVP_VerifyUpdate(&ctx, data, len);
-	if (ret != 1) {
-		return -1;
-	}
-	ret = EVP_VerifyFinal(&ctx, sig, siglen, key);
-	if (ret != 1) {
-		return -1;
-	}
-	EVP_MD_CTX_cleanup(&ctx);
-	return 0;
-}
-
 static DummySetupPackage *
 create_dummy(struct dummy_package *dp)
 {
@@ -663,7 +634,7 @@ sps_to_SetupPackage(struct setup_path *path, int package_index, int nround)
 	/*required bytes hash = 16;*/
 	/*required bytes external_hash = 17;*/
 	/*optional string ap_adress = 18;*/
-	/*optional bytes routing_table_entry = 19;*/
+	/*optional anonymized_rpc rpc = 19;*/
 	sp->prev_ip = ssp->prev_ip;
 	if ((ssp->flags & T_NODE) && (ssp->flags & X_NODE) && !  path->is_reverse_path && nround == 2) {
 		static char emptystring[] = {'"', '"', '\0'};
@@ -707,14 +678,22 @@ sps_to_SetupPackage(struct setup_path *path, int package_index, int nround)
 	/* hash will be set later  */
 	sp->external_hash.len = SHA_DIGEST_LENGTH;
 	/* external_hash will be set later  */
+
+	/* add AP for package */
 	if ((ssp->flags & T_NODE) && path->entrypath && nround == 2) {
-		int ret;
-		/* add routing table entry and own ap adress */
 		assert(sizeof (path->ap.s6_addr) == 16);
 		sp->has_ap_adress = 1;
 		sp->ap_adress.data = path->ap.s6_addr;
 		sp->ap_adress.len = 16;
-		ret = add_routing_table_entry(sp, &path->ap, &path->entry_ip, 1);
+		/* ret = add_routing_table_entry(sp, &path->ap, &path->entry_ip, 1); */
+		/* if (ret != 0) { */
+		/* 	cleanup_stack_free_all(); */
+		/* 	return NULL; */
+		/* } */
+	}
+	if ((ssp->flags & T_NODE) && (ssp->flags & ANONYMIZED_RPC) && nround == 2) {
+		int ret;
+		ret = add_anonymized_rpc(sp, path->anonymized_rpc);
 		if (ret != 0) {
 			cleanup_stack_free_all();
 			return NULL;
@@ -742,15 +721,8 @@ setup_package_free(SetupPackage *s)
 	if (s->external_hash.data != NULL) {
 		free(s->external_hash.data);
 	}
-	if (s->rte != NULL) {
-		if (s->rte->ip_adresses != NULL) {
-			free(s->rte->ip_adresses);
-		}
-		if (s->rte->ports != NULL) {
-			free(s->rte->ports);
-		}
-		free(s->rte);
-	}
+	/* TODO: rpc is freed where it is created. Is this good practice? */
+	/* free(s->rpc) */
 	free(s);
 }
 
@@ -1212,26 +1184,26 @@ setup_package_cleanup_helper(SetupPackage *s)
 	setup_package__free_unpacked(s, NULL);
 }
 
-static int
-validate_routing_table_entry(RoutingTableEntry *r)
-{
-	uint32_t i;
-	if (r->ap_adress.data == NULL) {
-		return -1;
-	}
-	if (r->ap_adress.len != 16) {
-		return -1;
-	}
-	if (r->n_ip_adresses < 1) {
-		return -1;
-	}
-	for (i = 0; i < r->n_ip_adresses; i++) {
-		if (r->ip_adresses[i] == NULL) {
-			return -1;
-		}
-	}
-	return 0;
-}
+/* static int */
+/* validate_routing_table_entry(RoutingTableEntry *r) */
+/* { */
+/* 	uint32_t i; */
+/* 	if (r->ap_adress.data == NULL) { */
+/* 		return -1; */
+/* 	} */
+/* 	if (r->ap_adress.len != 16) { */
+/* 		return -1; */
+/* 	} */
+/* 	if (r->n_ip_adresses < 1) { */
+/* 		return -1; */
+/* 	} */
+/* 	for (i = 0; i < r->n_ip_adresses; i++) { */
+/* 		if (r->ip_adresses[i] == NULL) { */
+/* 			return -1; */
+/* 		} */
+/* 	} */
+/* 	return 0; */
+/* } */
 
 static int
 validate_sp(const SetupPackage *sp)
@@ -1298,28 +1270,44 @@ validate_sp(const SetupPackage *sp)
 			if (sp->ap_adress.len != 16) {
 				return -1;
 			}
-			if (sp->rte == NULL) {
-				return -1;
-			}
-			if (validate_routing_table_entry(sp->rte) != 0) {
-				return -1;
-			}
+			/* if (sp->rte == NULL) { */
+			/* 	return -1; */
+			/* } */
+			/* if (validate_routing_table_entry(sp->rte) != 0) { */
+			/* 	return -1; */
+			/* } */
 		}
 	}
 	return 0;
 }
 
+/* static int */
+/* extract_rte_information(const RoutingTableEntry *r, struct conn_ctx *conn) */
+/* { */
+/* 	uint32_t ret; */
+/* 	conn->rte.len = routing_table_entry__get_packed_size(r); */
+/* 	conn->rte.data = malloc(conn->rte.len); */
+/* 	if (conn->rte.data == NULL) { */
+/* 		return -1; */
+/* 	} */
+/* 	ret = routing_table_entry__pack(r, conn->rte.data); */
+/* 	if (ret != conn->rte.len) { */
+/* 		return -1; */
+/* 	} */
+/* 	return 0; */
+/* } */
+
 static int
-extract_rte_information(const RoutingTableEntry *r, struct conn_ctx *conn)
+extract_anonymized_rpc(const AnonymizedRpc *rpc, struct conn_ctx *conn)
 {
 	uint32_t ret;
-	conn->rte.len = routing_table_entry__get_packed_size(r);
-	conn->rte.data = malloc(conn->rte.len);
-	if (conn->rte.data == NULL) {
+	conn->rpc.len = anonymized_rpc__get_packed_size(rpc);
+	conn->rpc.data = malloc(conn->rpc.len);
+	if (conn->rpc.data == NULL) {
 		return -1;
 	}
-	ret = routing_table_entry__pack(r, conn->rte.data);
-	if (ret != conn->rte.len) {
+	ret = anonymized_rpc__pack(rpc, conn->rpc.data);
+	if (ret != conn->rpc.len) {
 		return -1;
 	}
 	return 0;
@@ -1328,7 +1316,7 @@ extract_rte_information(const RoutingTableEntry *r, struct conn_ctx *conn)
 static int
 extract_slot_information(const SetupPackage *sp, struct conn_ctx *conn, int nround)
 {
-	/* all allocs will be freed by conn_ctx_free in case of failure */
+	/* all allocs will be freed by free_conn_ctx in case of failure */
 	struct X509_flat x;
 	BIO *mem;
 	BUF_MEM bptr;
@@ -1373,7 +1361,11 @@ extract_slot_information(const SetupPackage *sp, struct conn_ctx *conn, int nrou
 			if (sp->flags & X_NODE && sp->flags & ENTRY_NODE) {
 				assert(sp->ap_adress.len == 16);
 				memcpy(conn->ap.s6_addr, sp->ap_adress.data, 16);
-				if (extract_rte_information(sp->rte, conn) != 0) {
+				/* if (extract_rte_information(sp->rte, conn) != 0) { */
+				/* 	return -1; */
+				/* } */
+			} else if (sp->flags & ANONYMIZED_RPC) {
+				if (extract_anonymized_rpc(sp->rpc, conn) != 0) {
 					return -1;
 				}
 			}
@@ -1868,7 +1860,7 @@ generate_path_keys(const struct setup_path *path)
 }
 
 static struct path *
-construct_path(const struct config *config, int want_entrypath, int reserve_ap)
+construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *rpc)
 {
 	int ret, i, x_idx;
 	uint32_t outsize;
@@ -1879,11 +1871,11 @@ construct_path(const struct config *config, int want_entrypath, int reserve_ap)
 	struct awaited_connection *wait;
 
 	if (config->nynodes < 3 * config->nxnodes - 2 || config->nxnodes +
-	    config->nynodes > 0xef) {
+		config->nynodes > 0xef) {
 		return NULL;
 	}
 
-	path = create_struct_setup_path(config, want_entrypath, reserve_ap);
+	path = create_struct_setup_path(config, want_entrypath, rpc);
 	if (path == NULL) {
 		return NULL;
 	}
@@ -1990,11 +1982,61 @@ construct_path(const struct config *config, int want_entrypath, int reserve_ap)
 		delete_struct_setup_path(path);
 		return NULL;
 	}
+
 	p = new_path();
 	if (p == NULL) {
 		delete_struct_setup_path(path);
 		free_awaited_connection(wait);
 		return NULL;
+	}
+	if (want_entrypath) {
+		p->rte = malloc(sizeof (RoutingTableEntry));
+		if (p->rte == NULL) {
+			return NULL;
+		}
+		routing_table_entry__init(p->rte);
+
+		assert(sizeof (path->ap.s6_addr) == 16);
+		p->rte->ap_adress.data = path->ap.s6_addr;
+		p->rte->ap_adress.len = 16;
+
+		/* TODO: not supporting multiple entry points yet */
+		p->rte->n_ip_adresses = 1;
+		p->rte->ip_adresses = malloc(p->rte->n_ip_adresses * sizeof(char *));
+		if (p->rte->ip_adresses == NULL) {
+			free_path(p);
+			delete_struct_setup_path(path);
+			free_awaited_connection(wait);
+			return NULL;
+		}
+		p->rte->ip_adresses[0] = path->entry_ip;
+
+		p->rte->n_ports = 1;
+		p->rte->ports = malloc(p->rte->n_ports * sizeof(uint16_t));
+		if (p->rte->ports == NULL) {
+			free_path(p);
+			delete_struct_setup_path(path);
+			free_awaited_connection(wait);
+			return NULL;
+		}
+		p->rte->ports[0] = path->entry_port;
+
+		p->rte->version = 1;
+
+		ret = publish_routing_table_entry(config, p->rte);
+		if (ret != 0) {
+			free_path(p);
+			delete_struct_setup_path(path);
+			free_awaited_connection(wait);
+			return NULL;
+		}
+		update_netdb_publishing(p->rte);
+		if (ret != 0) {
+			free_path(p);
+			delete_struct_setup_path(path);
+			free_awaited_connection(wait);
+			return NULL;
+		}
 	}
 	p->ap = path->ap;
 	if (path->is_reverse_path) {
@@ -2058,19 +2100,19 @@ construct_path(const struct config *config, int want_entrypath, int reserve_ap)
 struct path *
 construct_entry_path(const struct config *config)
 {
-	return construct_path(config, 1, 0);
+	return construct_path(config, 1, NULL);
 }
 
 struct path *
-construct_reserve_ap_path(const struct config *config)
+construct_reserve_ap_path(const struct config *config, AnonymizedRpc *rpc)
 {
-	return construct_path(config, 0, 1);
+	return construct_path(config, 0, rpc);
 }
 
 struct path *
 construct_exit_path(const struct config *config)
 {
-	return construct_path(config, 0, 0);
+	return construct_path(config, 0, NULL);
 }
 
 void
@@ -2094,6 +2136,14 @@ free_path(struct path *path)
 	}
 	if (path->peer_ip != NULL) {
 		free(path->peer_ip);
+	}
+	if (path->rte != NULL) {
+		if (path->rte->ip_adresses != NULL) {
+			free(path->rte->ip_adresses);
+		}
+		if (path->rte->ports != NULL) {
+			free(path->rte->ports);
+		}
 	}
 	free(path);
 }

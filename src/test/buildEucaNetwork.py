@@ -286,7 +286,7 @@ def main():
         pprint(run_command_on_instances(command, server_set))
 
         # screen is just too hard to deal with, install tmux with the features we need (mux in 10.04 is too outdated)
-        # change this to a simple apt-get install mux with >= 11.10
+        # change this to a simple apt-get install tmux with >= 11.10
         command = ['wget http://sourceforge.net/projects/tmux/files/tmux/tmux-1.4/tmux-1.4.tar.gz',
                    'cd phantom',
                    'tar xvzf ../tmux-1.4.tar.gz']

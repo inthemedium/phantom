@@ -62,7 +62,7 @@ struct tunnel_worker {
 };
 
 struct exit_worker {
-	int reserve_ap;
+	int anonymized_rpc;
 	pthread_attr_t attr;
 	const struct conn_ctx *conn;
 	const struct ssl_connection *peer;

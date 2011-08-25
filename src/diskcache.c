@@ -100,6 +100,7 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 	pthread_mutex_lock(&d->lock);
 	if (access(name, R_OK | W_OK) == 0) {
 		int slen = strlen(name);
+		/* do not store if file already exists in disk_cache */
 		LIST_for_all(&d->files, help1, help2) {
 			if (slen == help1->len && ! memcmp(help1->name, name, slen)) {
 				assert(! clock_gettime(CLOCK_REALTIME, &help1->time));
@@ -111,6 +112,7 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 		assert(0);
 	}
 	r = new_record(name);
+	memcpy(r->key, key, SHA_DIGEST_LENGTH);
 	if (r == NULL) {
 		free(name);
 		return -1;
@@ -151,6 +153,8 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 	assert(d);
 	assert(key);
 	assert(outsize);
+
+	/* get full path to key on FS */
 	name = filename(d, key);
 	if (name == NULL) {
 		return NULL;

@@ -532,3 +532,60 @@ get_phantom_v6_addr(struct in6_addr *res)
 	}
 }
 #endif
+
+/* TODO: modify code so it uses the proper key length */
+int
+sign_data(uint8_t *sig, const uint8_t *data, uint32_t len, EVP_PKEY *key)
+{
+	int ret;
+	uint32_t written;
+	EVP_MD_CTX ctx;
+	const EVP_MD *type = EVP_sha1();
+	assert(BN_num_bits(key->pkey.rsa->n) == RSA_KEY_LEN);
+	EVP_MD_CTX_init(&ctx);
+	EVP_SignInit(&ctx, type);
+	ret = EVP_SignUpdate(&ctx, data, len);
+	if (ret != 1) {
+		return -1;
+	}
+	ret = EVP_SignFinal(&ctx, sig, &written, key);
+	if (ret != 1) {
+		return -1;
+	}
+	EVP_MD_CTX_cleanup(&ctx);
+	assert(written == RSA_SIGN_LEN);
+	return 0;
+}
+
+int
+check_signed_data(const uint8_t *sig, uint32_t siglen, const uint8_t *data, uint32_t len, EVP_PKEY *key)
+{
+	int ret;
+	EVP_MD_CTX ctx;
+	const EVP_MD *type = EVP_sha1();
+	EVP_MD_CTX_init(&ctx);
+	EVP_VerifyInit(&ctx, type);
+	ret = EVP_VerifyUpdate(&ctx, data, len);
+	if (ret != 1) {
+		return -1;
+	}
+	ret = EVP_VerifyFinal(&ctx, sig, siglen, key);
+	if (ret != 1) {
+		return -1;
+	}
+	EVP_MD_CTX_cleanup(&ctx);
+	return 0;
+}
+void
+packed_msg_free(struct packed_msg *m)
+{
+	if (m != NULL) {
+		if (m->data != NULL) {
+			free(m->data);
+			m->data = NULL;
+			m->len = 0;
+		}
+		free(m);
+		m = NULL;
+	}
+}
