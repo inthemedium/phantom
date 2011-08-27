@@ -225,7 +225,7 @@ def main():
 
         # install development tools on all instances
         command = ['sudo apt-get -y update',
-                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler gdb']
+                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler gdb valgrind']
         pprint(run_command_on_instances(command, instances))
 
         # configure easier ssh for nodes and needed to download/upload github source
@@ -251,9 +251,9 @@ def main():
                    'cd phantom',
                    'cd protos',
                    './generate_protos.sh',
-                   'cd ../src',
-                   'make',
                    'cd ../scripts',
+                   'make',
+                   'cd ../src',
                    'make']
         pprint(run_command_on_instances(command, server_set, file_tuples))
 
