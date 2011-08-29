@@ -14,15 +14,13 @@
 #include <time.h>
 #include "config.h"
 #include "list.h"
-#define TMP_X_NUM 27                     /* smallest integer x that satisfies
-                                            2^160 < 62^x */
-#define TMP_X "XXXXXXXXXXXXXXXXXXXXXXXXXXX"
+#include "kademlia.h"                   /* needed for metadata */
+
 struct disk_record {
 	struct disk_record *prev;
 	struct disk_record *next;
-	uint8_t key[SHA_DIGEST_LENGTH];
+	struct kad_metadata *metadata;
 	FILE *file;
-	struct timespec time;
 };
 
 struct disk_cache {
@@ -34,7 +32,7 @@ struct disk_cache {
 
 struct disk_cache *new_disk_cache(const char *dirname);
 void free_disk_cache(struct disk_cache *d);
-int disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, uint32_t len);
+int disk_cache_store(struct disk_cache *d, struct kad_metadata *metadata, const uint8_t *data, uint32_t len);
 uint8_t *disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize);
 void disk_cache_house_keeping(struct disk_cache *d);
 

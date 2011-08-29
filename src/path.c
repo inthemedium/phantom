@@ -321,6 +321,7 @@ build_xy_path(struct setup_path *path)
 	assert(x == path->nxnodes && cnt == path->nnodes);
 	/* reverse whole path with a 50% chance */
 	/* path->is_reverse_path = rand_range(0, 2); */
+	path->is_reverse_path = 0;
 	if (path->is_reverse_path) {
 		reverse_array(path->nodes, path->nnodes, sizeof (struct node_info));
 		for (i = 0; i < path->nnodes; i++) {
@@ -1987,20 +1988,20 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 
 	p = new_path();
 	if (p == NULL) {
-		delete_struct_setup_path(path);
 		if (path->is_reverse_path) {
 			free_awaited_connection(wait);
 		}
+		delete_struct_setup_path(path);
 		return NULL;
 	}
 	if (want_entrypath) {
 		p->rte = malloc(sizeof (RoutingTableEntry));
 		if (p->rte == NULL) {
 			free_path(p);
-			delete_struct_setup_path(path);
 			if (path->is_reverse_path) {
 				free_awaited_connection(wait);
 			}
+			delete_struct_setup_path(path);
 			return NULL;
 		}
 		routing_table_entry__init(p->rte);
@@ -2014,22 +2015,22 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		p->rte->ip_adresses = malloc(p->rte->n_ip_adresses * sizeof(char *));
 		if (p->rte->ip_adresses == NULL) {
 			free_path(p);
-			delete_struct_setup_path(path);
 			if (path->is_reverse_path) {
 				free_awaited_connection(wait);
 			}
+			delete_struct_setup_path(path);
 			return NULL;
 		}
 		p->rte->ip_adresses[0] = path->entry_ip;
 
 		p->rte->n_ports = 1;
-		p->rte->ports = malloc(p->rte->n_ports * sizeof(uint16_t));
+		p->rte->ports = malloc(p->rte->n_ports * sizeof(uint32_t));
 		if (p->rte->ports == NULL) {
 			free_path(p);
-			delete_struct_setup_path(path);
 			if (path->is_reverse_path) {
 				free_awaited_connection(wait);
 			}
+			delete_struct_setup_path(path);
 			return NULL;
 		}
 		p->rte->ports[0] = path->entry_port;
@@ -2039,10 +2040,10 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		ret = publish_routing_table_entry(config, p->rte);
 		if (ret != 0) {
 			free_path(p);
-			delete_struct_setup_path(path);
 			if (path->is_reverse_path) {
 				free_awaited_connection(wait);
 			}
+			delete_struct_setup_path(path);
 			return NULL;
 		}
 		update_netdb_publishing(p->rte);

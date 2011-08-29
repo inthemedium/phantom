@@ -27,3 +27,16 @@
    obj:*
    obj:*
 }
+
+{
+   <insert_a_suppression_name_here>
+   Memcheck:Value8
+   obj:/lib/libcrypto.so.0.9.8
+   fun:AES_cbc_encrypt
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+}

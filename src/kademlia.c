@@ -655,7 +655,7 @@ sort_list_by_closeness(const uint8_t *id, struct kad_node_list *l)
 #endif
 
 static struct kad_node_list *
-iterative_find(const uint8_t *id, uint8_t **data, size_t *len, int wantvalue)
+iterative_find(uint8_t *id, uint8_t **data, size_t *len, int wantvalue)
 {
 	struct kad_node_list *polled, *unpolled;
 	struct kad_node_info *help1, *help2, failed;
@@ -777,7 +777,7 @@ iterative_find(const uint8_t *id, uint8_t **data, size_t *len, int wantvalue)
 }
 
 static struct kad_node_list *
-iterative_find_node(const uint8_t *id)
+iterative_find_node(uint8_t *id)
 {
 	return iterative_find(id, NULL, NULL, 0);
 }
@@ -790,29 +790,22 @@ house_keeping_worker(void)
 	uint8_t id[SHA_DIGEST_LENGTH];
 	while (1) {
 		poll(NULL, 0, 1000 * HOUSE_KEEPING_TIMEOUT);
+		printf("HOUSEKEEEPOING!!!\n");
 		if (kad->quit) {
 			return;
 		}
 		ret = clock_gettime(CLOCK_REALTIME, &t);
 		assert(ret == 0);
-
-		/* ensure all the buckets are fresh */
-		for (i = 1; i < NBUCKETS; i++) {
-			if (t.tv_sec - kad->table->last_action[i].tv_sec > KAD_T_REFRESH) {
-				random_id_for_bucket(i, id);
-				free_kad_node_list(iterative_find_node(id));
-				assert(! clock_gettime(CLOCK_REALTIME, &kad->table->last_action[i]));
-				if (kad->quit) {
-					return;
-				}
-			}
-		}
-		/* XXX expire data */
-
+        /* TODO: move this back */
+		printf("starting republish!!!\n");
+		ret = clock_gettime(CLOCK_REALTIME, &t);
+		assert(ret == 0);
 		if (kad->rte != NULL) {
 			/* republish routing table entry*/
 			if (t.tv_sec - kad->last_republication.tv_sec > KAD_T_REPUBLISH) {
+              printf("version: %d!!!\n", kad->rte->version);
 				kad->rte->version++;
+              printf("version: %d!!!\n", kad->rte->version);
 				ret = publish_routing_table_entry(kad->config, kad->rte);
 				if (ret != -1) {
 					ret = clock_gettime(CLOCK_REALTIME, &kad->last_republication);
@@ -821,26 +814,53 @@ house_keeping_worker(void)
 			}
 		}
 
+		printf("starting replication!!!\n");
+		ret = clock_gettime(CLOCK_REALTIME, &t);
+		assert(ret == 0);
 		/* replicate all data stored in disk cache regularly */
 		if (t.tv_sec - kad->last_replication.tv_sec > KAD_T_REPLICATE) {
-				size_t len;
-				struct disk_record *help1, *help2;
-				uint8_t *data;
+			struct disk_record *help1, *help2;
+			size_t len;
+			struct disk_record list;
+			uint8_t *data;
 
-				LIST_for_all(&kad->cache->files, help1, help2) {
-					data = disk_cache_find(kad->cache, help1->key, &len);
-					if (data == NULL) {
-						continue;
-					}
-					ret = kad_store(help1->key, data, len);
-					if (ret == -1) {
-						continue;
-					}
-					free(data);
+			LIST_init(&list);
+			pthread_mutex_lock(&kad->cache->lock);
+			LIST_for_all(&kad->cache->files, help1, help2) {
+				LIST_insert(&list, help1);
+			}
+			pthread_mutex_unlock(&kad->cache->lock);
+			LIST_for_all(&list, help1, help2) {
+				data = disk_cache_find(kad->cache, help1->metadata->key, &len);
+				if (data == NULL) {
+					continue;
 				}
-				ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
-				assert(ret == 0);
+				ret = kad_store(help1->metadata->key, data, len);
+				if (ret == -1) {
+					continue;
+				}
+				free(data);
+			}
+			ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
+			assert(ret == 0);
 		}
+		/* XXX expire data */
+		printf("starting deletion!!!\n");
+		disk_cache_house_keeping(kad->cache);
+
+		/* ensure all the buckets are fresh */
+		for (i = 1; i < NBUCKETS; i++) {
+			if (t.tv_sec - kad->table->last_action[i].tv_sec > KAD_T_REFRESH) {
+				random_id_for_bucket(i, id);
+				/* free_kad_node_list(iterative_find_node(id)); */
+				/* assert(! clock_gettime(CLOCK_REALTIME, &kad->table->last_action[i])); */
+				if (kad->quit) {
+					return;
+				}
+			}
+		}
+
+		printf("starting again!!!\n");
 	}
 }
 
@@ -1109,7 +1129,7 @@ update_table_relay(const struct kad_node_info *n)
 }
 
 static struct kad_node_list *
-iterative_find_value(const uint8_t *id, uint8_t **data, size_t *len)
+iterative_find_value(uint8_t *id, uint8_t **data, size_t *len)
 {
 	struct kad_node_list *ret;
 	assert(id);
@@ -1169,11 +1189,11 @@ kad_store(uint8_t *key, uint8_t *data, uint32_t len)
 }
 
 int
-local_store(const uint8_t *key, const uint8_t *data, uint32_t len)
+local_store(struct kad_metadata *metadata, const uint8_t *data, uint32_t len)
 {
-	assert(key);
+	assert(metadata);
 	assert(data);
-	return disk_cache_store(kad->cache, key, data, len);
+	return disk_cache_store(kad->cache, metadata, data, len);
 }
 
 struct kad_node_list *
@@ -1291,7 +1311,7 @@ get_n_nodes(int n)
 	return NULL;
 }
 
-int kad_find(const uint8_t *key, uint8_t **data, size_t *len)
+int kad_find(uint8_t *key, uint8_t **data, size_t *len)
 {
 	struct kad_node_list *list;
 	assert(key);

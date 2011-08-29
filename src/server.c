@@ -412,14 +412,18 @@ write_pkg_over_tunnel(struct ssl_connection *tunnel_conn,
 	if (pkg_len > UINT32_MAX) {
 		return -1;
 	}
-	conv_pkg_len = pkg_len;
-	serialize_32_t(conv_pkg_len, ser_pkg_len);
+
 	rand_bytes(init_reply_package, TUNNEL_BLOCK_SIZE);
 	ret = ssl_write(tunnel_conn->ssl, init_reply_package, TUNNEL_BLOCK_SIZE);
 	if (ret != 0) {
 		return -1;
 	}
 
+	EVP_CIPHER_CTX_init(&dctx);
+	EVP_DecryptInit(&dctx, EVP_aes_256_ofb(), ew->dp->key, ew->dp->iv);
+
+	conv_pkg_len = pkg_len;
+	serialize_32_t(conv_pkg_len, ser_pkg_len);
 	obuf = malloc((pkg_len > sizeof(conv_pkg_len)) ?
                   pkg_len : sizeof(conv_pkg_len) +
                   EVP_CIPHER_CTX_block_size(&dctx) + 1);
@@ -427,8 +431,6 @@ write_pkg_over_tunnel(struct ssl_connection *tunnel_conn,
 		return -1;
 	}
 	/* write the size on the package on the wire first */
-	EVP_CIPHER_CTX_init(&dctx);
-	EVP_DecryptInit(&dctx, EVP_aes_256_ofb(), ew->dp->key, ew->dp->iv);
 	EVP_DecryptUpdate(&dctx, obuf, &writ, ser_pkg_len, sizeof(conv_pkg_len));
 	ret = ssl_write(tunnel_conn->ssl, obuf, sizeof(conv_pkg_len));
 

@@ -645,6 +645,8 @@ int handle_rpc_store(SSL *from, X509 *cert, uint8_t *package, int size)
 	uint32_t packed_size, ret;
 	struct kad_node_info *n;
 	uint8_t *packed;
+	struct kad_metadata *metadata;
+	RoutingTableEntry *rte;
 	assert(from);
 	assert(cert);
 	assert(package);
@@ -658,10 +660,30 @@ int handle_rpc_store(SSL *from, X509 *cert, uint8_t *package, int size)
 	ret = validate_store_request(request);
 	if (ret != 0) {
 		store__free_unpacked(request, NULL);
-		return 0;
+		return -1;
 	}
 	store_reply__init(&reply);
-	ret = local_store(request->key.data, request->data.data, request->data.len);
+
+	metadata = malloc(sizeof (struct kad_metadata));
+	if (metadata == NULL) {
+		store__free_unpacked(request, NULL);
+		return -1;
+	}
+	memcpy(metadata->key, request->key.data, SHA_DIGEST_LENGTH);
+
+	rte = unpack_verify_srte(request->data.data, request->data.len, NULL);
+	if (rte == NULL) {
+		store__free_unpacked(request, NULL);
+		return -1;
+	}
+	metadata->version = rte->version;
+
+	clock_gettime(CLOCK_REALTIME, &metadata->exp_time);
+	/* TODO: make this more accurate */
+	metadata->exp_time.tv_sec += KAD_T_EXPIRE;
+
+	ret = local_store(metadata, request->data.data, request->data.len);
+
 	if (ret == 0) {
 		reply.success = 1;
 	} else {

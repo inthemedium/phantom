@@ -44,8 +44,12 @@ validate_routing_table_entry(const RoutingTableEntry *r, const struct in6_addr *
 	if (r->ap_adress.len != 16) {
 		return -1;
 	}
-	if (memcmp(r->ap_adress.data, ap_adress->s6_addr, sizeof(ap_adress->s6_addr))) {
-		return -1;
+	if (ap_adress != NULL) {
+		if (memcmp(r->ap_adress.data,
+				   ap_adress->s6_addr,
+				   sizeof(ap_adress->s6_addr))) {
+			return -1;
+		}
 	}
 	if (r->n_ip_adresses != r->n_ports) {
 		return -1;
@@ -88,10 +92,41 @@ validate_routing_table_entry(const RoutingTableEntry *r, const struct in6_addr *
 int register_my_node_in_the_network(char *ip, uint8_t *communicationcertificate, uint8_t *path_building_certificate);
 int extend_ap_adress_lease(struct in6_addr *ap_adress, uint8_t *signed_lease_request, uint8_t *routing_certificate);
 
+RoutingTableEntry *
+unpack_verify_srte(uint8_t *data, size_t len, const struct in6_addr *ap_adress)
+{
+	SignedRoutingTableEntry *srte;
+	RoutingTableEntry *rte;
+	int ret;
+
+	assert(data);
+	assert(len);
+	srte = signed_routing_table_entry__unpack(NULL, len, data);
+	if (srte == NULL) {
+		return NULL;
+	}
+	ret = validate_signed_routing_table_entry(srte);
+	if (ret != 0) {
+		signed_routing_table_entry__free_unpacked(srte, NULL);
+		return NULL;
+	}
+	rte = routing_table_entry__unpack(NULL,
+                                      srte->packed_routing_table_entry.len,
+                                      srte->packed_routing_table_entry.data);
+	signed_routing_table_entry__free_unpacked(srte, NULL);
+	if (rte == NULL) {
+		return NULL;
+	}
+	ret = validate_routing_table_entry(rte, ap_adress);
+	if (ret != 0) {
+		routing_table_entry__free_unpacked(rte, NULL);
+		return NULL;
+	}
+	return rte;
+}
 int
 get_entry_nodes_for_ap_adress(char ***ip_adresses, uint16_t **ports, int *num, const struct in6_addr *ap_adress)
 {
-	SignedRoutingTableEntry *srte;
 	RoutingTableEntry *rte;
 	uint8_t hash[SHA_DIGEST_LENGTH], *data;
 	uint32_t i;
@@ -104,27 +139,8 @@ get_entry_nodes_for_ap_adress(char ***ip_adresses, uint16_t **ports, int *num, c
 	if (ret != 0) {
 		return -1;
 	}
-	srte = signed_routing_table_entry__unpack(NULL, len, data);
-	free(data);
-	if (srte == NULL) {
-		return -1;
-	}
-	ret = validate_signed_routing_table_entry(srte);
-	if (ret != 0) {
-		signed_routing_table_entry__free_unpacked(srte, NULL);
-		return -1;
-	}
-	rte = routing_table_entry__unpack(NULL,
-                                      srte->packed_routing_table_entry.len,
-                                      srte->packed_routing_table_entry.data);
+	rte = unpack_verify_srte(data, len, ap_adress);
 	if (rte == NULL) {
-		signed_routing_table_entry__free_unpacked(srte, NULL);
-		return -1;
-	}
-	signed_routing_table_entry__free_unpacked(srte, NULL);
-	ret = validate_routing_table_entry(rte, ap_adress);
-	if (ret != 0) {
-		routing_table_entry__free_unpacked(rte, NULL);
 		return -1;
 	}
 	iip_adresses = malloc (rte->n_ip_adresses * sizeof (char *));
@@ -157,6 +173,7 @@ perform_anonymous_rpc(const struct config *config,
 	struct path *path;
 	struct tunnel *t;
 	int ret;
+	uint32_t len;
 	struct packed_msg *packed_msg;
 
 	cleanup_stack_init;
@@ -174,13 +191,14 @@ perform_anonymous_rpc(const struct config *config,
 		return NULL;
 	}
 	cleanup_stack_push(free_tunnel, t);
-	ret = tunnel_read(t, buf, sizeof(packed_msg->len));
+	ret = tunnel_read(t, buf, sizeof(uint32_t));
 	if (ret == -1) {
 		cleanup_stack_free_all();
 		return NULL;
 	}
-	packed_msg = malloc(sizeof (packed_msg));
-	packed_msg->len = deserialize_32_t(buf);
+	len = deserialize_32_t(buf);
+	packed_msg = malloc(sizeof (struct packed_msg));
+	packed_msg->len = len;
 	packed_msg->data = malloc(packed_msg->len);
 	if (packed_msg->data == NULL) {
 		cleanup_stack_free_all();
@@ -278,7 +296,7 @@ publish_routing_table_entry(const struct config *config,
 		cleanup_stack_free_all();
 		return -1;
 	}
-	if (!reply->success) {
+	if (reply->success) {
 		store_reply__free_unpacked(reply, NULL);
 		cleanup_stack_free_all();
 		return -1;

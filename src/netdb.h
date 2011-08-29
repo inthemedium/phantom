@@ -24,4 +24,5 @@ int get_random_node_ip_adresses(char **adresses, uint16_t *ports, X509 **communi
 int get_entry_nodes_for_ap_adress(char ***ip_adresses, uint16_t **ports, int *num, const struct in6_addr *ap_adress);
 int publish_routing_table_entry(const struct config *config, RoutingTableEntry *srte);
 void update_netdb_publishing(RoutingTableEntry *rte);
+RoutingTableEntry *unpack_verify_srte(uint8_t *data, size_t len, const struct in6_addr *ap_adress);
 #endif

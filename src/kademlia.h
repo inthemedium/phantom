@@ -20,13 +20,19 @@
 #define PING_TIMEOUT 10
 #define HOUSE_KEEPING_TIMEOUT 30
 #define TIME_SPEED_FACTOR 1/1800
-#define KAD_T_REFRESH 3600 * TIME_SPEED_FACTOR /* bucket refresh */
-#define KAD_T_REPLICATE 3600 * TIME_SPEED_FACTOR /* publish entire db */
-#define KAD_T_REPUBLISH 86400 * TIME_SPEED_FACTOR /* republish own key/value pairs */
-#define KAD_T_EXPIRE (KAD_T_REPUBLISH + 20) * TIME_SPEED_FACTOR /* key value ttl */
+#define KAD_T_REFRESH 30 /* bucket refresh */
+#define KAD_T_REPLICATE 2 /* publish entire db */
+#define KAD_T_REPUBLISH 30 /* republish own key/value pairs */
+#define KAD_T_EXPIRE (KAD_T_REPUBLISH + 60) /* key value ttl */
 
 #define MAX_JOIN_RETRIES 5
 #define JOIN_WAIT 5
+
+struct kad_metadata {
+	uint8_t key[SHA_DIGEST_LENGTH];
+	struct timespec exp_time;
+	uint32_t version;
+};
 
 struct thread {
 	struct thread *next;
@@ -93,13 +99,13 @@ struct kad {
 int start_kad(const struct config *config);
 void stop_kad(void);
 int kad_store(uint8_t *key, uint8_t *data, uint32_t len);
-int kad_find(const uint8_t *key, uint8_t **data, size_t *len);
+int kad_find(uint8_t *key, uint8_t **data, size_t *len);
 struct kad_node_list *get_n_nodes_debug(int n);
 struct kad_node_list *get_n_nodes(int n);
 
 /* Functions needed from other kademlia modules */
 int local_find(const uint8_t *key, uint8_t **data, size_t *len);
-int local_store(const uint8_t *key, const uint8_t *data, uint32_t len);
+int local_store(struct kad_metadata *metadata, const uint8_t *data, uint32_t len);
 struct kad_node_list *get_k_closest_nodes(const uint8_t *id, const uint8_t *requestor);
 void free_kad_node_list(struct kad_node_list *l);
 struct kad_node_info *new_kad_node_info(const uint8_t *id, const char *ip, uint16_t port, X509 *cert, X509 *pbc);

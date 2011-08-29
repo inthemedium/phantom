@@ -1,16 +1,16 @@
 #include "diskcache.h"
 
 static struct disk_record *
-new_record(FILE *file, const uint8_t *key)
+new_record(FILE *file, struct kad_metadata *metadata)
 {
 	struct disk_record *out;
 	assert(file);
-	out = calloc(sizeof (struct disk_record), 1);
+	out = malloc(sizeof (struct disk_record));
 	if (out == NULL) {
 		return NULL;
 	}
 	out->file = file;
-	memcpy(out->key, key, SHA_DIGEST_LENGTH);
+	out->metadata = metadata;
 	return out;
 }
 
@@ -18,6 +18,7 @@ static void
 free_record(struct disk_record *r)
 {
 	fclose(r->file);
+	free(r->metadata);
 }
 
 struct disk_cache *
@@ -55,29 +56,46 @@ free_disk_cache(struct disk_cache *d)
 }
 
 int
-disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, uint32_t len)
+disk_cache_store(struct disk_cache *d, struct kad_metadata *metadata, const uint8_t *data, uint32_t len)
 {
 	int ret;
-	FILE *file;
 	uint32_t have;
-	struct disk_record *r;
+	struct disk_record *help1, *help2, *r, *existing_record = NULL;
+	FILE *file;
 	assert(d);
-	assert(key);
+	assert(metadata);
 	assert(data);
 	assert(len);
 	if (len > INT_MAX) {
 		return -1;
 	}
+
+	pthread_mutex_lock(&d->lock);
+
+	LIST_for_all(&d->files, help1, help2) {
+		if (! memcmp(help1->metadata->key, metadata->key, SHA_DIGEST_LENGTH)) {
+			existing_record = help1;
+			break;
+		}
+	}
+
 	file = tmpfile();
 	if (file == NULL) {
-		return -1;
-	}
-	pthread_mutex_lock(&d->lock);
-	r = new_record(file, key);
-	if (r == NULL) {
-		fclose(file);
 		pthread_mutex_unlock(&d->lock);
 		return -1;
+	}
+
+	if (existing_record == NULL) {
+		r = new_record(file, metadata);
+		if (r == NULL) {
+			fclose(file);
+			pthread_mutex_unlock(&d->lock);
+			return -1;
+		}
+	} else {
+      printf("this key has been seen\n");
+		fclose(existing_record->file);
+		existing_record->file = file;
 	}
 
 	have = 0;
@@ -91,8 +109,13 @@ disk_cache_store(struct disk_cache *d, const uint8_t *key, const uint8_t *data, 
 		have += ret * len;
 	}
 	assert(have == len);
-	assert(! clock_gettime(CLOCK_REALTIME, &r->time));
-	LIST_insert(&d->files, r);
+	if (existing_record == NULL) {
+		ret = clock_gettime(CLOCK_REALTIME, &r->metadata->exp_time);
+		perror("clock_gettime");
+		printf("%p\n", (void *)&r->metadata->exp_time);
+		assert(! ret);
+		LIST_insert(&d->files, r);
+	}
 	pthread_mutex_unlock(&d->lock);
 	return 0;
 }
@@ -112,7 +135,7 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 	pthread_mutex_lock(&d->lock);
 
 	LIST_for_all(&d->files, help1, help2) {
-		if (!memcmp(help1->key, key, SHA_DIGEST_LENGTH)) {
+		if (! memcmp(help1->metadata->key, key, SHA_DIGEST_LENGTH)) {
 			file = help1->file;
 			break;
 		}
@@ -124,8 +147,9 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 		return NULL;
 	}
 
-    fseek(file, 0L, SEEK_END);
+	fseek(file, 0L, SEEK_END);
 	want = ftell(file);
+	assert(want);
 	rewind(file);
 	out = malloc(want);
 	if (out == NULL) {
@@ -153,5 +177,19 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 void
 disk_cache_house_keeping(struct disk_cache *d)
 {
+	struct disk_record *help1, *help2;
+	struct timespec t;
 	assert(d);
+
+	assert(! clock_gettime(CLOCK_REALTIME, &t));
+	pthread_mutex_lock(&d->lock);
+	LIST_for_all(&d->files, help1, help2) {
+		if (t.tv_sec - help1->metadata->exp_time.tv_sec > 0) {
+			/* TODO: consider putting this in some kind of recently removed list */
+          printf("deleting something\n");
+			LIST_remove(help1);
+			free_record(help1);
+		}
+	}
+	pthread_mutex_unlock(&d->lock);
 }

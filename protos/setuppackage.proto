@@ -7,7 +7,7 @@ message dummy_setup_package {
 message routing_table_entry {
 	required bytes ap_adress = 1;
 	repeated string ip_adresses = 2;
-	repeated fixed32 ports = 3;
+	repeated uint32 ports = 3; /* more space than we need */
 	required uint32 version = 4; /* note that a value of 0 is reservered */
 }
 
