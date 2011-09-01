@@ -34,6 +34,12 @@ struct kad_metadata {
 	uint32_t version;
 };
 
+struct keys {
+	struct keys *next;
+	struct keys *prev;
+	uint8_t key[SHA_DIGEST_LENGTH];
+};
+
 struct thread {
 	struct thread *next;
 	struct thread *prev;

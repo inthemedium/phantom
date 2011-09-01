@@ -820,26 +820,34 @@ house_keeping_worker(void)
 		/* replicate all data stored in disk cache regularly */
 		if (t.tv_sec - kad->last_replication.tv_sec > KAD_T_REPLICATE) {
 			struct disk_record *help1, *help2;
-			size_t len;
-			struct disk_record list;
-			uint8_t *data;
+			struct keys *help1_key, *help2_key, *key_copy;
+			struct keys keys_list;
 
-			LIST_init(&list);
+			LIST_init(&keys_list);
+			/* make a copy of the keys to prevent a race condition */
 			pthread_mutex_lock(&kad->cache->lock);
 			LIST_for_all(&kad->cache->files, help1, help2) {
-				LIST_insert(&list, help1);
+				key_copy = malloc(sizeof (struct keys));
+				memcpy(key_copy->key, help1->metadata->key, SHA_DIGEST_LENGTH);
+				LIST_insert(&keys_list, key_copy);
 			}
 			pthread_mutex_unlock(&kad->cache->lock);
-			LIST_for_all(&list, help1, help2) {
-				data = disk_cache_find(kad->cache, help1->metadata->key, &len);
+
+			LIST_for_all(&keys_list, help1_key, help2_key) {
+				uint8_t *data;
+				size_t len;
+
+				data = disk_cache_find(kad->cache, help1_key->key, &len);
 				if (data == NULL) {
 					continue;
 				}
-				ret = kad_store(help1->metadata->key, data, len);
+				ret = kad_store(help1_key->key, data, len);
 				if (ret == -1) {
 					continue;
 				}
 				free(data);
+				LIST_remove(help1_key);
+				free(help1_key);
 			}
 			ret = clock_gettime(CLOCK_REALTIME, &kad->last_replication);
 			assert(ret == 0);
@@ -896,7 +904,7 @@ join_network(const char *filename)
 			return 0;
 		}
 	}
-	/* refresh all buckets -> start houekeeping thread */
+	/* refresh all buckets -> start housekeeping thread */
 	LIST_for_all(&start_contacts, help1, help2) {
 		free_kad_node_info(help1);
 	}
@@ -1192,7 +1200,12 @@ int
 local_store(struct kad_metadata *metadata, const uint8_t *data, uint32_t len)
 {
 	assert(metadata);
+	assert(metadata->key);
 	assert(data);
+
+	if (in_disk_cache(kad->cache, metadata) == 0) {
+		return 0;
+	}
 	return disk_cache_store(kad->cache, metadata, data, len);
 }
 

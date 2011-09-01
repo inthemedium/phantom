@@ -35,5 +35,5 @@ void free_disk_cache(struct disk_cache *d);
 int disk_cache_store(struct disk_cache *d, struct kad_metadata *metadata, const uint8_t *data, uint32_t len);
 uint8_t *disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize);
 void disk_cache_house_keeping(struct disk_cache *d);
-
+int in_disk_cache(struct disk_cache *d, const struct kad_metadata *metadata);
 #endif

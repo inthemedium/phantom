@@ -4,7 +4,7 @@ OBJECTSD=phantomd.o
 CC=gcc
 #CC=clang
 CFLAGS=-O0 -g -ansi -pipe -D_POSIX_C_SOURCE=200112L -I/usr/include/libxml2 -Wall -Werror -Wextra -Wbad-function-cast -Wcast-qual -Wdeclaration-after-statement -Wmissing-prototypes -Wpointer-arith -Wshadow -Wstrict-prototypes -Wformat -Wformat-security -Wunused -Wwrite-strings -Waggregate-return -pedantic #-Wuninitialized -fstack-protector-all
-LIBS=-lcrypto -lssl -lxml2 -lrt -lpthread -lprotobuf-c -lgcc_s
+LIBS=-lcrypto -lssl -lxml2 -lrt -lpthread -lprotobuf-c
 #LIBS=-lcrypto -lssl -lxml2 -lrt -lpthread -lprotobuf-c -I../lssl/openssl-1.0.0 L../lssl/openssl-1.0.0
 BINARY=phantom
 BINARYD=phantomd

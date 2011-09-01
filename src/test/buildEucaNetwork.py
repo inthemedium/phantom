@@ -224,9 +224,12 @@ def main():
         print("Setting up instances. This will be another few minutes.")
 
         # install development tools on all instances
+        file_tuples = [('protobuf-c_0.15-1_amd64.deb', 'protobuf-c_0.15-1_amd64.deb')]
         command = ['sudo apt-get -y update',
-                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev libprotobuf-c0-dev protobuf-c-compiler gdb valgrind']
-        pprint(run_command_on_instances(command, instances))
+                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev gdb valgrind clang protobuf-c-compiler libprotobuf-c0-dev',
+                   'sudo apt-get -y remove libprotobuf-c0-dev',
+				   'sudo dpkg -i *.deb']
+        pprint(run_command_on_instances(command, instances, file_tuples))
 
         # configure easier ssh for nodes and needed to download/upload github source
         file_tuples = [('./home.patch', 'home.patch'),
@@ -267,7 +270,7 @@ def main():
                    'sudo modprobe nfs',
                    'cd',
                    'mkdir phantom',
-                   'sudo mount -t nfs4 ' + server_inst.private_dns_name + ':/ /home/ubuntu/phantom']
+                   'sudo mount -t nfs4 -o noac ' + server_inst.private_dns_name + ':/ /home/ubuntu/phantom']
         pprint(run_command_on_instances(command, instances - server_set, file_tuples))
 
         # get hostnames to create network to seed KAD

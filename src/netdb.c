@@ -10,6 +10,15 @@ validate_signed_routing_table_entry(const SignedRoutingTableEntry *srte)
 	int ret;
 	cleanup_stack_init;
 
+	if (srte->packed_routing_table_entry.data == NULL){
+		return -1;
+	}
+	if (srte->routing_certificate_flat.data == NULL){
+		return -1;
+	}
+	if (srte->signature.data == NULL){
+		return -1;
+	}
 	routing_certificate_flat.data = srte->routing_certificate_flat.data;
 	routing_certificate_flat.len = srte->routing_certificate_flat.len;
 	routing_certificate = read_x509_from_x509_flat(&routing_certificate_flat);

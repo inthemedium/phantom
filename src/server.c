@@ -407,6 +407,8 @@ write_pkg_over_tunnel(struct ssl_connection *tunnel_conn,
 	uint8_t *obuf;
 	uint32_t conv_pkg_len;
 	uint8_t init_reply_package[TUNNEL_BLOCK_SIZE], ser_pkg_len[sizeof(conv_pkg_len)];
+	assert(pkg);
+	assert(pkg_len);
 
 	/* catch overflows */
 	if (pkg_len > UINT32_MAX) {
@@ -433,6 +435,11 @@ write_pkg_over_tunnel(struct ssl_connection *tunnel_conn,
 	/* write the size on the package on the wire first */
 	EVP_DecryptUpdate(&dctx, obuf, &writ, ser_pkg_len, sizeof(conv_pkg_len));
 	ret = ssl_write(tunnel_conn->ssl, obuf, sizeof(conv_pkg_len));
+
+	if (ret != 0) {
+		free(obuf);
+		return -1;
+	}
 
     /* write the package on the wire */
 	EVP_DecryptUpdate(&dctx, obuf, &writ, pkg, conv_pkg_len);
@@ -479,6 +486,7 @@ exit_worker(struct exit_worker *ew)
 		return -1;
 	}
 	ip = ip4_to_char(sa.sin_addr.s_addr);
+	/* TODO change to ew->conn->next_port or prev_port? */
 	tunnel_conn = create_ssl_connection(ip, /*htons(sa.sin_port) XXX */8080, server.certificate, server.privkey);
 	free(ip);
 	if (tunnel_conn == NULL) {
@@ -531,8 +539,8 @@ exit_worker(struct exit_worker *ew)
 	}
 	if (ew->anonymized_rpc) {
 		AnonymizedRpc *rpc;
-		uint8_t *packed_reply;
-		size_t len;
+		uint8_t *packed_reply = NULL;   /* set for LLVM */
+		size_t len = 0;   /* set for LLVM */
 
 		rpc = anonymized_rpc__unpack(NULL, ew->conn->rpc.len, ew->conn->rpc.data);
 		if (rpc->type == ANONYMOUS_FIND) {
@@ -920,6 +928,7 @@ tunnel_worker(struct tunnel_worker *tw)
 		return -1;
 	}
 	ip = ip4_to_char(sa.sin_addr.s_addr);
+	/* TODO change to tw->conn->next_port or prev_port? */
 	tunnel_conn = create_ssl_connection(ip, /*htons(sa.sin_port)*/ 8080, server.certificate, server.privkey);
 	free(ip);
 	if (tunnel_conn == NULL) {

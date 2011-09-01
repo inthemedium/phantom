@@ -2007,12 +2007,13 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 		routing_table_entry__init(p->rte);
 
 		assert(sizeof (path->ap.s6_addr) == 16);
-		p->rte->ap_adress.data = path->ap.s6_addr;
+		p->rte->ap_adress.data = malloc(sizeof (path->ap.s6_addr));
+		memcpy(p->rte->ap_adress.data, path->ap.s6_addr, sizeof (path->ap.s6_addr));
 		p->rte->ap_adress.len = 16;
 
 		/* TODO: not supporting multiple entry points yet */
 		p->rte->n_ip_adresses = 1;
-		p->rte->ip_adresses = malloc(p->rte->n_ip_adresses * sizeof(char *));
+		p->rte->ip_adresses = malloc(p->rte->n_ip_adresses * sizeof (char *));
 		if (p->rte->ip_adresses == NULL) {
 			free_path(p);
 			if (path->is_reverse_path) {
@@ -2021,7 +2022,8 @@ construct_path(const struct config *config, int want_entrypath, AnonymizedRpc *r
 			delete_struct_setup_path(path);
 			return NULL;
 		}
-		p->rte->ip_adresses[0] = path->entry_ip;
+        p->rte->ip_adresses[0] = malloc( strlen(path->entry_ip) + 1);
+        strcpy(p->rte->ip_adresses[0], path->entry_ip);
 
 		p->rte->n_ports = 1;
 		p->rte->ports = malloc(p->rte->n_ports * sizeof(uint32_t));
