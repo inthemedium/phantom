@@ -486,8 +486,7 @@ exit_worker(struct exit_worker *ew)
 		return -1;
 	}
 	ip = ip4_to_char(sa.sin_addr.s_addr);
-	/* TODO change to ew->conn->next_port or prev_port? */
-	tunnel_conn = create_ssl_connection(ip, /*htons(sa.sin_port) XXX */8080, server.certificate, server.privkey);
+	tunnel_conn = create_ssl_connection(ip, ew->conn->peer_port, server.certificate, server.privkey);
 	free(ip);
 	if (tunnel_conn == NULL) {
 		free_exit_worker(ew);
@@ -928,8 +927,7 @@ tunnel_worker(struct tunnel_worker *tw)
 		return -1;
 	}
 	ip = ip4_to_char(sa.sin_addr.s_addr);
-	/* TODO change to tw->conn->next_port or prev_port? */
-	tunnel_conn = create_ssl_connection(ip, /*htons(sa.sin_port)*/ 8080, server.certificate, server.privkey);
+	tunnel_conn = create_ssl_connection(ip, tw->conn->peer_port, server.certificate, server.privkey);
 	free(ip);
 	if (tunnel_conn == NULL) {
 		free(init_package);
@@ -1075,11 +1073,13 @@ become_x_node(struct conn_ctx *conn, struct awaited_connection *x_conn)
 			}
 			conn->peer_id = conn->next_id;
 			conn->peer_ip = conn->next_ip;
+			conn->peer_port = conn->next_port;
 			conn->peer_cert = conn->next_communication_certificate;
 			ret = become_tx_node(conn->to_next, conn);
 		} else {
 			conn->peer_id = conn->prev_id;
 			conn->peer_ip = conn->prev_ip;
+			conn->peer_port = conn->prev_port;
 			conn->peer_cert = conn->prev_communication_certificate;
 			ret = become_tx_node(x_conn->incoming_conn, conn);
 		}
@@ -1132,8 +1132,12 @@ become_x_node(struct conn_ctx *conn, struct awaited_connection *x_conn)
 		}
 		if (tunnel_dummy_package == one.tunnel_dummy_package) {
 			aw = register_wait_connection(conn->next_ip, conn->next_id);
+			/* save for later */
+			conn->peer_port = conn->next_port;
 		} else {
 			aw = register_wait_connection(conn->prev_ip, conn->prev_id);
+			/* save for later */
+			conn->peer_port = conn->prev_port;
 		}
 		if (aw == NULL) {
 			free(dp);
@@ -1189,12 +1193,21 @@ check_for_kademlia_magic(SSL *ssl, X509 *client_cert, uint8_t *package, int size
 	switch (deserialize_32_t(package)) {
 		case KAD_MAGIC_STORE:
 			ret = handle_rpc_store(ssl, client_cert, package + 4, size - 4);
+			if (ret == -1) {
+              printf("store failed!");
+			}
 			break;
 		case KAD_MAGIC_FIND_VALUE:
 			ret = handle_rpc_find_value(ssl, client_cert, package + 4, size - 4);
+			if (ret == -1) {
+              printf("find value failed!");
+			}
 			break;
 		case KAD_MAGIC_FIND_NODE:
 			ret = handle_rpc_find_node(ssl, client_cert, package + 4, size - 4);
+			if (ret == -1) {
+              printf("find node failed!");
+			}
 			break;
 		default:
 			ret = -1;

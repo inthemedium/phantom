@@ -28,7 +28,7 @@ struct conn_ctx {
 	uint32_t flags;
 	uint8_t *peer_id; /* used for terminating nodes */
 	char *peer_ip; /* used for terminating nodes */
-	uint16_t peer_port; /* used for terminating nodes */
+	uint16_t peer_port; /* used for terminating and regular x nodes */
 	X509 *peer_cert; /* used for terminating nodes */
 	struct xkeys *keys;
 	struct ssl_connection *to_next;

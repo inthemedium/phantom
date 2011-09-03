@@ -6,7 +6,7 @@ for i in $HOSTS;
 	do
 	for j in $CERTPOSTS;
 		do
-		openssl genrsa 1024 > "$i-privkey-$j.pem";
+		openssl genrsa 2048 > "$i-privkey-$j.pem";
 		yes XX | openssl req -new -x509 -nodes -sha1 -days 365 -key "$i-privkey-$j.pem" > "$i-$j.pem";
 	done
 IP="127.0.0.1"

@@ -20,7 +20,8 @@ struct disk_record {
 	struct disk_record *prev;
 	struct disk_record *next;
 	struct kad_metadata *metadata;
-	FILE *file;
+	int file;
+	size_t file_len;
 };
 
 struct disk_cache {

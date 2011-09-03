@@ -792,6 +792,7 @@ house_keeping_worker(void)
 		poll(NULL, 0, 1000 * HOUSE_KEEPING_TIMEOUT);
 		printf("HOUSEKEEEPOING!!!\n");
 		if (kad->quit) {
+          printf("quitting kad");
 			return;
 		}
 		ret = clock_gettime(CLOCK_REALTIME, &t);
@@ -862,9 +863,6 @@ house_keeping_worker(void)
 				random_id_for_bucket(i, id);
 				/* free_kad_node_list(iterative_find_node(id)); */
 				/* assert(! clock_gettime(CLOCK_REALTIME, &kad->table->last_action[i])); */
-				if (kad->quit) {
-					return;
-				}
 			}
 		}
 

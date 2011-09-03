@@ -1,15 +1,21 @@
 #include "diskcache.h"
 
 static struct disk_record *
-new_record(FILE *file, struct kad_metadata *metadata)
+new_record(struct kad_metadata *metadata)
 {
 	struct disk_record *out;
-	assert(file);
+	FILE * file;
+
 	out = malloc(sizeof (struct disk_record));
 	if (out == NULL) {
 		return NULL;
 	}
-	out->file = file;
+	file = tmpfile();
+	if (file == NULL) {
+		free(out);
+		return NULL;
+	}
+	out->file = fileno(file);
 	out->metadata = metadata;
 	return out;
 }
@@ -17,8 +23,7 @@ new_record(FILE *file, struct kad_metadata *metadata)
 static void
 free_record(struct disk_record *r)
 {
-	fclose(r->file);
-	r->file = NULL;
+	close(r->file);
 	free(r->metadata);
 	r->metadata = NULL;
 	free(r);
@@ -62,9 +67,8 @@ int
 disk_cache_store(struct disk_cache *d, struct kad_metadata *metadata, const uint8_t *data, uint32_t len)
 {
 	int ret;
-	uint32_t have;
 	struct disk_record *help1, *help2, *r;
-	FILE *file;
+
 	assert(d);
 	assert(metadata);
 	assert(data);
@@ -74,44 +78,31 @@ disk_cache_store(struct disk_cache *d, struct kad_metadata *metadata, const uint
 	}
 
 	pthread_mutex_lock(&d->lock);
-	printf("storing key %s, v%d\n",
-                   bin_to_hex(metadata->key, SHA_DIGEST_LENGTH),
-                   metadata->version);
 	LIST_for_all(&d->files, help1, help2) {
 		if (! memcmp(help1->metadata->key, metadata->key, SHA_DIGEST_LENGTH)) {
-          printf("replacing data! old %d, new %d\n",
-                 help1->metadata->version, metadata->version);
 			LIST_remove(help1);
 			free_record(help1);
 			break;
 		}
 	}
 
-	file = tmpfile();
-	if (file == NULL) {
-		pthread_mutex_unlock(&d->lock);
-		return -1;
-	}
-
-	r = new_record(file, metadata);
-	printf("new data! version %d\n", metadata->version);
+	r = new_record(metadata);
 	if (r == NULL) {
-		fclose(file);
 		pthread_mutex_unlock(&d->lock);
 		return -1;
 	}
 
-	have = 0;
-	while (have < len) {
-		ret = fwrite(data + have, len - have, 1, file);
-		if (ret == 0) {
+	r->file_len = 0;
+	while (r->file_len < len) {
+		ret = write(r->file, data + r->file_len, len - r->file_len);
+		if (ret == -1) {
 			free_record(r);
 			pthread_mutex_unlock(&d->lock);
 			return -1;
 		}
-		have += ret * len;
+		r->file_len += ret;
 	}
-	assert(have == len);
+	assert(r->file_len == len);
 	assert(! clock_gettime(CLOCK_REALTIME, &r->metadata->exp_time));
 	LIST_insert(&d->files, r);
 
@@ -124,9 +115,9 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 {
 	uint8_t *out;
 	int ret;
-	size_t want, have;
-	struct disk_record *help1, *help2;
-	FILE *file = NULL;
+	size_t have;
+	struct disk_record *help1, *help2, *found = NULL;
+
 	assert(d);
 	assert(key);
 	assert(outsize);
@@ -135,45 +126,34 @@ disk_cache_find(struct disk_cache *d, const uint8_t *key, size_t *outsize)
 
 	LIST_for_all(&d->files, help1, help2) {
 		if (! memcmp(help1->metadata->key, key, SHA_DIGEST_LENGTH)) {
-	printf("found key %s, v%d\n",
-                   bin_to_hex(help1->metadata->key, SHA_DIGEST_LENGTH),
-                   help1->metadata->version);
-			file = help1->file;
+			found = help1;
 			break;
 		}
 	}
 
 	/* key is not among records */
-	if (file == NULL) {
+	if (! found) {
 		pthread_mutex_unlock(&d->lock);
 		return NULL;
 	}
-
-	ret = fseek(file, 0L, SEEK_END);
-	if (ret != 0) {
-		perror("fseek");
-	}
-	want = ftell(file);
-	assert(want);
-	rewind(file);
-	out = malloc(want);
+	assert(found->file_len);
+	lseek(found->file, 0, SEEK_SET);
+	out = malloc(found->file_len);
 	if (out == NULL) {
 		pthread_mutex_unlock(&d->lock);
 		return NULL;
 	}
 	have = 0;
-	while (have < want) {
-		ret = fread(out + have, want - have, 1, file);
-		if (ret == 0) {
-			if (! feof(file)) {
-				free(out);
-				pthread_mutex_unlock(&d->lock);
-				return NULL;
-			}
+	while (have < found->file_len) {
+		ret = read(found->file, out + have, found->file_len - have);
+		if (ret == -1) {
+			free(out);
+			pthread_mutex_unlock(&d->lock);
+			return NULL;
 		}
-		have += want * ret;
+		have += ret;
 	}
-	assert(have == want);
+	assert(have == found->file_len);
 	*outsize = have;
 	pthread_mutex_unlock(&d->lock);
 	return out;
@@ -190,11 +170,7 @@ disk_cache_house_keeping(struct disk_cache *d)
 	assert(! clock_gettime(CLOCK_REALTIME, &t));
 	LIST_for_all(&d->files, help1, help2) {
 		if (t.tv_sec - help1->metadata->exp_time.tv_sec > 0) {
-			printf("deleting key %s, v%d\n",
-                   bin_to_hex(help1->metadata->key, SHA_DIGEST_LENGTH),
-                   help1->metadata->version);
 			/* TODO: consider putting this in some kind of recently removed list */
-			printf("deleting something\n");
 			LIST_remove(help1);
 			free_record(help1);
 		}
