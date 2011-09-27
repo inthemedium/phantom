@@ -134,10 +134,8 @@ main(int argc, char **argv)
 	struct config config;
 	int c;
 	char confname[HOST_NAME_MAX + 100], buf[100];
-	struct tun_dev *tun;
 	struct app a;
 	char **oldenv;
-	tun = NULL;
 	(void) argv;
 	(void) argc;
 	quit = 0;
