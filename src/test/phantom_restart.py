@@ -1,5 +1,19 @@
 # this script restart all the phantom processes running in tmux
 
+instances_in_sync = False
+while not instances_in_sync:
+    command = ['stat phantom/src/phantom',
+               'md5sum -c <(echo "' + md5sum + '")']
+    output = run_command_on_instances(command, instances)
+    instances_in_sync = True
+    for i in output:
+        if i.exit_status != 0:
+            pprint("instance " + i.hostname + " not in sync")
+            pprint(i)
+            instances_in_sync = False
+            time.sleep(15)
+            break
+
 command = ['rm -rf ~/tmp || true',
            'cp -r phantom/src ~/tmp'
           ]
@@ -18,6 +32,6 @@ command = ['tmux kill-window -t phantom:phantom',
            'sudo ip address flush dev phantom',
            'tmux new-window -t phantom: -n phantom',
            'tmux clear-history -t phantom:phantom',
-           'tmux send-keys -t phantom:phantom \'cd /home/ubuntu/tmp && sudo ./phantom\' C-m']
+           'tmux send-keys -t phantom:phantom \'cd ~/tmp && sudo ./phantom\' C-m']
 output = run_command_on_instances(command, instances)
 pprint(output)

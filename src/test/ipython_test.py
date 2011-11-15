@@ -6,7 +6,10 @@ phantom_addrs = run_command_on_instances(['ifconfig phantom | grep inet | cut -d
 ping_mat = {}
 problem_instances = set(instances)
 for result in phantom_addrs:
-    dest_ipv6_addr = result.output[0].strip()
+    try:
+        dest_ipv6_addr = result.output[0].strip()
+    except IndexError:
+        continue
     foo = run_command_on_instances(['ifconfig phantom | grep inet | cut -d: -f2- | cut -d\/ -f1 && ping6 -c 2 ' + dest_ipv6_addr], instances)
     ping_mat[dest_ipv6_addr] = {}
     print

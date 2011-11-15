@@ -10,6 +10,7 @@
 # 3. setup euca2ools such that the environment variables 'EC2_URL', 'EC2_ACCESS_KEY', and 'EC2_SECRET_KEY' key are defined
 # 4. change the my_id to your eucalpytus username
 # 5. run it on the secclound!
+# 6. add aws ssh key to github
 
 # TODO use tags when they are implemented with eucalyptus
 
@@ -25,13 +26,15 @@ from threading import Thread
 import readline
 
 # Global vars
-img_id = "emi-3F101642"
-img_username = "ubuntu"
 
-key_name = "phantom"
-key_filename = os.path.expanduser('~/.euca/id_' + key_name)
+# needs to have a EBS with t1.micro
+img_id = "ami-aef607c7"
+img_username = "root"
 
-ec2_inside_url = "http://192.168.48.91:8773/services/Eucalyptus"
+key_name = "amazonkey"
+key_filename = os.path.expanduser('~/.ssh/' + key_name)
+
+ec2_inside_url = ""
 inside_access = None
 
 # public elastic ip address for the nfs server instance
@@ -63,11 +66,12 @@ class CommandInstance(Thread):
         Thread.__init__(self)
         self.instance = instance
         self.client = paramiko.SSHClient()
-        self.hostname = instance.dns_name
+        self.hostname = instance.public_dns_name
+        self.hostname_prv = instance.private_dns_name
         self.ssh_port = 22
-        if not inside_access:
-            self.hostname = "128.111.48.6"
-            self.ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
+        # if not inside_access:
+        #     self.hostname = "128.111.48.6"
+        #     self.ssh_port = int('48' + self.instance.dns_name.split('.')[3].zfill(3))
         self.client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         self.command = ""
         self.results = Bunch()
@@ -77,23 +81,25 @@ class CommandInstance(Thread):
         self.file_tuples = file_tuples
 
     def run(self):
-        try:
-            self.client.connect(self.hostname,
-                                self.ssh_port,
-                                img_username,
-                                key_filename=key_filename)
-        except socket.error:
-            if inside_access:
-                print "trying again with private dns name"
-                self.hostname = self.instance.private_dns_name
+        while True:
+            try:
                 self.client.connect(self.hostname,
                                     self.ssh_port,
                                     img_username,
                                     key_filename=key_filename)
-            else:
-                print "outside connection failed to", self.hostname,\
-                "port", self.ssh_port
-                raise
+                break
+            except socket.error:
+                if inside_access:
+                    print "trying again with private dns name"
+                    self.hostname = self.instance.private_dns_name
+                    self.client.connect(self.hostname,
+                                        self.ssh_port,
+                                        img_username,
+                                        key_filename=key_filename)
+                else:
+                    print "connection failed to", self.hostname,\
+                          "port", self.ssh_port
+                    time.sleep(15)
         ftp = self.client.open_sftp()
         for src, dest in self.file_tuples:
             ftp.put(src, dest)
@@ -115,6 +121,7 @@ class CommandInstance(Thread):
         self.results.command = cmd_str
         self.results.exit_status = chan.recv_exit_status()
         self.results.hostname = self.instance.dns_name
+        self.results.hostname_prv = self.hostname_prv
         self.results.instance = self.instance
         self.results.output = stdout.readlines()
         ftp.close()
@@ -136,10 +143,15 @@ def run_command_on_instances(command, instances, file_tuples=[]):
     return results
 
 def main():
-    ep_hostname = os.environ['EC2_URL'].split('/')[2].split(':')[0]
-    ep_port = int(os.environ['EC2_URL'].split('/')[2].split(':')[1])
-    access_key = os.environ['EC2_ACCESS_KEY']
-    secret_key = os.environ['EC2_SECRET_KEY']
+    # ep_hostname = os.environ['EC2_URL'].split('/')[2].split(':')[0]
+    # ep_port = int(os.environ['EC2_URL'].split('/')[2].split(':')[1])
+    # access_key = os.environ['EC2_ACCESS_KEY']
+    # secret_key = os.environ['EC2_SECRET_KEY']
+    ep_hostname = "us-east-1.ec2.amazonaws.com"
+    ep_port = 443
+    access_key = os.environ['AWS_ACCESS_KEY_ID']
+    secret_key = os.environ['AWS_SECRET_ACCESS_KEY']
+    instance_type = "t1.micro"
 
     global inside_access
     if os.environ['EC2_URL'] == ec2_inside_url:
@@ -152,17 +164,30 @@ def main():
     except (ValueError, IndexError):
         total_insts = 0
 
-    region = boto.ec2.regioninfo.RegionInfo(name="eucalpytus", endpoint=ep_hostname)
-    connection = boto.connect_ec2(aws_access_key_id=access_key,
-                                  aws_secret_access_key=secret_key,
-                                  is_secure=False,
-                                  region=region,
-                                  port=ep_port,
-                                  path="/services/Eucalyptus")
+    region = boto.ec2.regioninfo.RegionInfo(name="us-east-1", endpoint=ep_hostname)
+    # connection = boto.connect_ec2(aws_access_key_id=access_key,
+    #                               aws_secret_access_key=secret_key,
+    #                               is_secure=True,
+    #                               region=region,
+    #                               port=ep_port,
+    #                               path="/")
+    target_region = "us-east-1"
+    regions = boto.ec2.regions()
+    connection = None
+    for region in regions:
+        if region.name == target_region:
+            connection = region.connect()
+    # connection = boto.connect_ec2(region=region)
 
     # this method actually returns reservation objects rather than instance objects
-    all_reservations = connection.get_all_instances()
-    images = connection.get_all_images()
+    all_reservations = []
+    for res in connection.get_all_instances():
+        all_reservations.append(res)
+        for inst in res.instances:
+            if inst.state != "running":
+                all_reservations.pop()
+                break
+    img = connection.get_all_images([img_id])[0]
     # kernels = connection.get_all_kernels()
     keys = connection.get_all_key_pairs()
     instances = None
@@ -171,16 +196,13 @@ def main():
     server_set = None
 
     if total_insts > 0:
-        for img in images:
-            if img.id == img_id:
-                pub_res = img.run(min_count=total_insts,
-                                  max_count=total_insts,
-                                  instance_type='m1.small',
-                                  key_name=key_name,
-                                  addressing_type='public')
+        pub_res = img.run(min_count=total_insts,
+                          max_count=total_insts,
+                          instance_type=instance_type,
+                          key_name=key_name)
+                          # addressing_type='public')
 
-                instances = frozenset(pub_res.instances)
-                break
+        instances = frozenset(pub_res.instances)
 
         running_insts = 0
 
@@ -191,28 +213,32 @@ def main():
             running_insts = 0
 
             for inst in instances:
-                inst.update()
+                try:
+                    inst.update()
+                except boto.exception.EC2ResponseError:
+                    print "received an error in the request!"
+                    break
+
                 if inst.state == "running":
                     running_insts += 1
 
             time.sleep(15)
-
         # mark which instance will be the NFS server
         for inst in instances:
             if inst.ami_launch_index == '0':
                 # change the public ip of the server
-                for a in connection.get_all_addresses():
-                    if a.public_ip == nfs_server_eip:
-                        inst.use_ip(a.public_ip)
-                        # should be:
-                        # while inst.ip_address != a.public_ip:
-                        # but eucalyptus doesn't properly fill the instance obj
-                        while inst.public_dns_name != a.public_ip:
-                            sys.stdout.write(".")
-                            sys.stdout.flush()
+                # for a in connection.get_all_addresses():
+                #     if a.public_ip == nfs_server_eip:
+                #         inst.use_ip(a.public_ip)
+                #         # should be:
+                #         # while inst.ip_address != a.public_ip:
+                #         # but eucalyptus doesn't properly fill the instance obj
+                #         while inst.public_dns_name != a.public_ip:
+                #             sys.stdout.write(".")
+                #             sys.stdout.flush()
 
-                            inst.update()
-                            time.sleep(1)
+                #             inst.update()
+                #             time.sleep(1)
                 inst.tags = {'server':True}
                 server_inst = inst
                 server_set = frozenset([server_inst])
@@ -223,12 +249,13 @@ def main():
         print
         print("Setting up instances. This will be another few minutes.")
 
+        # import pdb; pdb.set_trace()
         # install development tools on all instances
         file_tuples = [('protobuf-c_0.15-1_amd64.deb', 'protobuf-c_0.15-1_amd64.deb')]
-        command = ['sudo apt-get -y update',
-                   'sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev gdb valgrind clang protobuf-c-compiler libprotobuf-c0-dev',
-                   'sudo apt-get -y remove libprotobuf-c0-dev',
-				   'sudo dpkg -i *.deb']
+        command = ['while true; do sleep 10; sudo apt-get -y update && break; done',
+                   'while true; do sleep 10; sudo apt-get -y install git-svn gcc libssl-dev libxml2-dev gdb valgrind clang protobuf-c-compiler libprotobuf-c0-dev && break; done',
+                   'while true; do sleep 10; sudo apt-get -y remove libprotobuf-c0-dev && break; done',
+                   'while true; do sleep 10; sudo dpkg -i *.deb  && break; done']
         pprint(run_command_on_instances(command, instances, file_tuples))
 
         # configure easier ssh for nodes and needed to download/upload github source
@@ -238,12 +265,19 @@ def main():
                    'patch -p1 < home.patch']
         pprint(run_command_on_instances(command, instances, file_tuples))
 
+        # for /etc/exports
+        nfs_options = '(rw,fsid=0,insecure,subtree_check,sync)'
+        nfs_hosts = '"'
+        for inst in instances:
+            nfs_hosts = nfs_hosts + ' ' + inst.private_ip_address + nfs_options
+        nfs_hosts = nfs_hosts + '"'
 
         # configure the nfs server
         file_tuples = [('./server.patch', 'server.patch')]
-        command = ['sudo apt-get -y install nfs-kernel-server',
+        command = ['while true; do sleep 10; sudo apt-get -y install nfs-kernel-server  && break; done',
                    'cd /',
                    'sudo patch -p1 < ~/server.patch',
+                   'sudo sh -c \'echo ~/phantom' + nfs_hosts + '>> /etc/exports\'',
                    'sudo service idmapd --full-restart',
                    'sudo service statd --full-restart',
                    'sudo service nfs-kernel-server --full-restart']
@@ -262,7 +296,7 @@ def main():
 
         # configure and mount the nfs share
         file_tuples = [('./client.patch', 'client.patch')]
-        command = ['sudo apt-get -y install nfs-common',
+        command = ['while true; do sleep 10; sudo apt-get -y install nfs-common  && break; done',
                    'cd /etc',
                    'sudo patch -p1 < ~/client.patch',
                    'sudo service idmapd --full-restart',
@@ -270,7 +304,7 @@ def main():
                    'sudo modprobe nfs',
                    'cd',
                    'mkdir phantom',
-                   'sudo mount -t nfs4 -o noac ' + server_inst.private_dns_name + ':/ /home/ubuntu/phantom']
+                   'sudo mount -t nfs4 -o actimeo=0 ' + server_inst.private_ip_address + ':/ ~/phantom']
         pprint(run_command_on_instances(command, instances - server_set, file_tuples))
 
         # get hostnames to create network to seed KAD
@@ -288,14 +322,14 @@ def main():
                    './genkadnodes-list.sh']
         pprint(run_command_on_instances(command, server_set))
 
-        # screen is just too hard to deal with, install tmux with the features we need (mux in 10.04 is too outdated)
+        # screen is just too hard to deal with, install tmux with the features we need (tmux in 10.04 is too outdated)
         # change this to a simple apt-get install tmux with >= 11.10
         command = ['wget http://sourceforge.net/projects/tmux/files/tmux/tmux-1.4/tmux-1.4.tar.gz',
                    'cd phantom',
                    'tar xvzf ../tmux-1.4.tar.gz']
         pprint(run_command_on_instances(command, server_set))
 
-        command = ['sudo apt-get -y install libncurses5-dev libevent-dev',
+        command = ['while true; do sleep 10; sudo apt-get -y install libncurses5-dev libevent-dev && break; done',
                    'cp -r phantom/tmux-1.4 ./',
                    'cd tmux-1.4',
                    './configure',
@@ -313,7 +347,7 @@ def main():
                    'cd',
                    'tmux new-session -d -s phantom -n phantom',
                    'tmux new-window -t phantom: -n misc',
-                   'tmux send-keys -t phantom:phantom \'cd /home/ubuntu/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
+                   'tmux send-keys -t phantom:phantom \'cd ~/phantom/src/ && sudo ./phantomd && sudo ./phantom\' C-m',
                    'tmux bind-key C-b last-window']
         pprint(run_command_on_instances(command, instances))
 
@@ -321,8 +355,10 @@ def main():
         # find all the already running instances
         tmp_insts = []
         for res in all_reservations:
-            if res.owner_id == my_id:
+            # if res.owner_id == my_id:
                 for inst in res.instances:
+                    if inst.state == "terminated":
+                        continue
                     if inst.key_name == key_name:
                         if inst.ami_launch_index == '0':
                             inst.tags = {'server':True}

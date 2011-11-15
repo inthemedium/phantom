@@ -12,12 +12,3 @@ index 52f7f91..c0a1735 100644
  # Do you want to start the gssd daemon? It is required for Kerberos mounts.
 -NEED_GSSD=
 +NEED_GSSD=no
-diff --git a/etc/exports b/etc/exports
-index 9bff680..757f6ce 100644
---- a/etc/exports
-+++ b/etc/exports
-@@ -8,3 +8,4 @@
- # /srv/nfs4        gss/krb5i(rw,sync,fsid=0,crossmnt,no_subtree_check)
- # /srv/nfs4/homes  gss/krb5i(rw,sync,no_subtree_check)
- #
-+/home/ubuntu/phantom 172.19.1.0/24(rw,fsid=0,insecure,no_subtree_check,async)
