@@ -266,7 +266,7 @@ def main():
         pprint(run_command_on_instances(command, instances, file_tuples))
 
         # for /etc/exports
-        nfs_options = '(rw,fsid=0,insecure,subtree_check,sync)'
+        nfs_options = '(rw,fsid=0,insecure,sync)'
         nfs_hosts = '"'
         for inst in instances:
             nfs_hosts = nfs_hosts + ' ' + inst.private_ip_address + nfs_options
@@ -304,7 +304,7 @@ def main():
                    'sudo modprobe nfs',
                    'cd',
                    'mkdir phantom',
-                   'sudo mount -t nfs4 -o actimeo=0 ' + server_inst.private_ip_address + ':/ ~/phantom']
+                   'sudo mount -t nfs4 ' + server_inst.private_ip_address + ':/ ~/phantom']
         pprint(run_command_on_instances(command, instances - server_set, file_tuples))
 
         # get hostnames to create network to seed KAD
